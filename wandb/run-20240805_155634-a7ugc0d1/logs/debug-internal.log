@@ -847,3 +847,66 @@
 2024-08-05 16:07:41,710 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
 2024-08-05 16:07:42,782 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: status_report
 2024-08-05 16:07:43,712 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:07:45,712 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:07:47,713 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:07:47,832 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: status_report
+2024-08-05 16:07:49,714 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:07:51,715 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:07:52,884 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: status_report
+2024-08-05 16:07:53,715 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:07:54,278 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: partial_history
+2024-08-05 16:07:54,280 DEBUG   SenderThread:2438793 [sender.py:send():382] send: history
+2024-08-05 16:07:54,280 DEBUG   SenderThread:2438793 [sender.py:send_request():409] send_request: summary_record
+2024-08-05 16:07:54,280 INFO    SenderThread:2438793 [sender.py:_save_file():1403] saving file wandb-summary.json with policy end
+2024-08-05 16:07:54,716 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/wandb-summary.json
+2024-08-05 16:07:55,716 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:07:56,599 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: stop_status
+2024-08-05 16:07:56,600 DEBUG   SenderThread:2438793 [sender.py:send_request():409] send_request: stop_status
+2024-08-05 16:07:56,604 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: internal_messages
+2024-08-05 16:07:56,717 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:07:57,717 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:07:57,966 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: status_report
+2024-08-05 16:07:59,719 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:01,720 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:03,061 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: status_report
+2024-08-05 16:08:03,721 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:05,650 DEBUG   SenderThread:2438793 [sender.py:send():382] send: stats
+2024-08-05 16:08:05,722 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:07,723 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:08,758 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: status_report
+2024-08-05 16:08:09,723 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:11,585 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: partial_history
+2024-08-05 16:08:11,586 DEBUG   SenderThread:2438793 [sender.py:send():382] send: history
+2024-08-05 16:08:11,586 DEBUG   SenderThread:2438793 [sender.py:send_request():409] send_request: summary_record
+2024-08-05 16:08:11,587 INFO    SenderThread:2438793 [sender.py:_save_file():1403] saving file wandb-summary.json with policy end
+2024-08-05 16:08:11,599 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: stop_status
+2024-08-05 16:08:11,600 DEBUG   SenderThread:2438793 [sender.py:send_request():409] send_request: stop_status
+2024-08-05 16:08:11,603 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: internal_messages
+2024-08-05 16:08:11,724 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/wandb-summary.json
+2024-08-05 16:08:11,725 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:12,725 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:13,725 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:13,773 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: status_report
+2024-08-05 16:08:15,726 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:17,727 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:18,778 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: status_report
+2024-08-05 16:08:19,727 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:21,729 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:23,729 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:24,221 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: status_report
+2024-08-05 16:08:25,730 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:26,609 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: stop_status
+2024-08-05 16:08:26,610 DEBUG   SenderThread:2438793 [sender.py:send_request():409] send_request: stop_status
+2024-08-05 16:08:26,614 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: internal_messages
+2024-08-05 16:08:27,731 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:28,298 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: partial_history
+2024-08-05 16:08:28,300 DEBUG   SenderThread:2438793 [sender.py:send():382] send: history
+2024-08-05 16:08:28,300 DEBUG   SenderThread:2438793 [sender.py:send_request():409] send_request: summary_record
+2024-08-05 16:08:28,300 INFO    SenderThread:2438793 [sender.py:_save_file():1403] saving file wandb-summary.json with policy end
+2024-08-05 16:08:28,732 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/wandb-summary.json
+2024-08-05 16:08:29,231 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: status_report
+2024-08-05 16:08:29,733 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:30,733 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:31,733 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:33,734 INFO    Thread-12 :2438793 [dir_watcher.py:_on_file_modified():288] file/dir modified: /home/zungwooker/Debiasing/BE-GeneBC/wandb/run-20240805_155634-a7ugc0d1/files/output.log
+2024-08-05 16:08:34,312 DEBUG   HandlerThread:2438793 [handler.py:handle_request():146] handle_request: status_report
