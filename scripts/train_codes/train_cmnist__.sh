@@ -1,0 +1,79 @@
+### LfF + BE
+
+python train.py \
+    --gpu_num 2 \
+    --train_disent_be__ \
+    --data_dir '/home/zungwooker/Debiasing/benchmarks' \
+    --device 'cuda' \
+    --dataset=cmnist \
+    --percent=0.5pct \
+    --lr=0.01 \
+    --exp=disent_be_gene_cmnist_0.5 \
+    --num_steps 50000 \
+    --num_bias_models 5 \
+    --agreement 3 \
+    --curr_step 10000 \
+    --lambda_swap 1 \
+    --lambda_dis_align 10 \
+    --lambda_swap_align 10 \
+    --use_lr_decay \
+    --lr_decay_step 10000 \
+    --lr_gamma 0.5 \
+    --projcode 'BE-DISENT-CMNIST' \
+    --run_name 'Refine: 0.5pct Origin+Gene, B.Net & BCDs get only original dataset' \
+    --preproc_dir '/home/zungwooker/Debiasing/preproc' \
+    --ema \
+    --wandb \
+    --email 'KM BE-DISENT 0: CMNIST 0.5pct training done.\n CMNIST 1pct training...'
+
+python train.py \
+    --gpu_num 2 \
+    --train_disent_be__ \
+    --data_dir '/home/zungwooker/Debiasing/benchmarks' \
+    --device 'cuda' \
+    --dataset=cmnist \
+    --percent=0.5pct \
+    --lr=0.01 \
+    --exp=disent_be_gene_cmnist_0.5 \
+    --num_steps 50000 \
+    --num_bias_models 5 \
+    --agreement 3 \
+    --curr_step 10000 \
+    --lambda_swap 1 \
+    --lambda_dis_align 10 \
+    --lambda_swap_align 10 \
+    --use_lr_decay \
+    --lr_decay_step 10000 \
+    --lr_gamma 0.5 \
+    --projcode 'BE-DISENT-CMNIST-BASE' \
+    --run_name 'Refine: 0.5pct Origin+Gene, B.Net & BCDs get only original dataset' \
+    --preproc_dir '/home/zungwooker/Debiasing/preproc' \
+    --ema \
+    --wandb \
+    --email 'KM BE-DISENT 0: CMNIST 0.5pct training done.\n CMNIST 1pct training...'
+
+python train.py \
+    --gpu_num 2 \
+    --train_disent_be__ \
+    --data_dir '/home/zungwooker/Debiasing/benchmarks' \
+    --device 'cuda' \
+    --dataset=cmnist \
+    --percent=0.5pct \
+    --lr=0.01 \
+    --exp=disent_be_gene_cmnist_0.5 \
+    --num_steps 50000 \
+    --num_bias_models 5 \
+    --agreement 3 \
+    --curr_step 10000 \
+    --lambda_swap 1 \
+    --lambda_dis_align 10 \
+    --lambda_swap_align 10 \
+    --use_lr_decay \
+    --lr_decay_step 10000 \
+    --lr_gamma 0.5 \
+    --projcode 'BE-DISENT-CMNIST-BASE' \
+    --run_name 'Refine: 0.5pct Origin+Gene, B.Net & BCDs get only original dataset' \
+    --preproc_dir '/home/zungwooker/Debiasing/preproc' \
+    --ema \
+    --wandb \
+    --email 'KM BE-DISENT 0: CMNIST 0.5pct training done.\n CMNIST 1pct training...'
