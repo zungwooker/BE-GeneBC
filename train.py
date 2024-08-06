@@ -64,7 +64,11 @@ if __name__ == '__main__':
     parser.add_argument("--train_vanilla", action="store_true", help="whether to train vanilla")
     parser.add_argument("--train_vanilla_ours", action="store_true", help="whether to train vanilla + ours")
     parser.add_argument("--train_lff_be_ours", action="store_true", help="whether to train BE + LfF + ours")
+    parser.add_argument("--train_lff_be_ours_all", action="store_true", help="whether to train BE + LfF + ours")
+    parser.add_argument("--train_lff_ours", action="store_true", help="whether to train LfF + ours")
+    parser.add_argument("--train_lff_ours_all", action="store_true", help="whether to train LfF + ours")
     parser.add_argument("--train_disent_be_ours", action="store_true", help="whether to train BE + DisEnt + ours")
+    parser.add_argument("--train_disent_ours", action="store_true", help="whether to train DisEnt + ours")
 
     parser.add_argument("--fix_randomseed", action="store_true", help="fix randomseed")
     parser.add_argument("--seed",  help="seed", type=int, default=42)
@@ -108,8 +112,16 @@ if __name__ == '__main__':
         learner.train_vanilla(args, origin_only=False)
     elif args.train_lff_be_ours:
         learner.train_lff_be_ours(args)
+    elif args.train_lff_be_ours_all:
+        learner.train_lff_be_ours_all(args)
+    elif args.train_lff_ours:
+        learner.train_lff_ours(args)
+    elif args.train_lff_ours_all:
+        learner.train_lff_ours_all(args)
     elif args.train_disent_be_ours:
         learner.train_disent_be_ours(args)
+    elif args.train_disent_ours:
+        learner.train_disent_ours(args)
     else:
         print('choose one of the two options ...')
         import sys

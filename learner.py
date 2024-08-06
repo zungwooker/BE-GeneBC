@@ -139,14 +139,24 @@ class Learner(object):
         )
 
         # For BCDs
-        self.pretrain_loader = DataLoader(
-            self.train_dataset, # Original dataset
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=args.num_workers,
-            pin_memory=False,
-            drop_last=False
-        )
+        if args.train_lff_be_ours:
+            self.pretrain_loader = DataLoader(
+                self.train_dataset, # Original dataset
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=args.num_workers,
+                pin_memory=False,
+                drop_last=False
+            )
+        elif args.train_lff_be_ours_all:
+            self.pretrain_loader = DataLoader(
+                self.train_g_dataset, # Original + Generated dataset
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=args.num_workers,
+                pin_memory=False,
+                drop_last=False
+            )
 
         self.valid_loader = DataLoader(
             self.valid_dataset,
@@ -186,10 +196,10 @@ class Learner(object):
 
         self.bias_criterion = GeneralizedCELoss(q=0.7)
         print(f'self.bias_criterion: {self.bias_criterion}')
-
-        self.sample_loss_ema_b = EMA(torch.LongTensor(train_g_target_attr), num_classes=self.num_classes, alpha=args.ema_alpha)
-        self.sample_loss_ema_d = EMA(torch.LongTensor(train_g_target_attr), num_classes=self.num_classes, alpha=args.ema_alpha)
-
+        
+        self.sample_loss_ema_b = EMA(torch.LongTensor(train_g_target_attr), num_classes=self.num_classes, alpha=args.ema_alpha, device=self.device)
+        self.sample_loss_ema_d = EMA(torch.LongTensor(train_g_target_attr), num_classes=self.num_classes, alpha=args.ema_alpha, device=self.device)
+        
         print(f'alpha : {self.sample_loss_ema_d.alpha}')
         self.best_valid_acc_b, self.best_test_acc_b = 0., 0.
         self.best_valid_acc_d, self.best_test_acc_d = 0., 0.
@@ -540,8 +550,12 @@ class Learner(object):
         return hook
 
     def pretrain_b_ensemble_best(self, args):
-        train_iter = iter(self.train_loader)
-        train_num = len(self.train_dataset.dataset)
+        if args.train_lff_be_ours:
+            train_iter = iter(self.train_loader)
+            train_num = len(self.train_dataset.dataset)
+        elif args.train_lff_be_ours_all:
+            train_iter = iter(self.train_g_loader)
+            train_num = len(self.train_g_dataset.dataset)
             
         epoch, cnt = 0, 0
         index_dict, label_dict, gt_prob_dict = {}, {}, {}
@@ -678,11 +692,8 @@ class Learner(object):
         
         if origin_only:
             train_iter = iter(self.train_loader)
-            train_num = len(self.train_dataset.dataset)
         else:
             train_iter = iter(self.train_g_loader)
-            train_num = len(self.train_g_dataset.dataset)
-        epoch, cnt = 0, 0
 
         for step in tqdm(range(args.num_steps)):
             try:
@@ -706,6 +717,132 @@ class Learner(object):
             if step % args.valid_freq == 0:
                 self.board_vanilla_acc(step)
 
+    def train_lff_be_ours_all(self, args):
+        print('Training LfF with BiasEnsemble ...')
+
+        num_updated = 0
+        train_iter = iter(self.train_g_loader)
+        train_num = len(self.train_g_dataset.dataset)
+
+        mask_index = torch.zeros(train_num, 1)
+        self.conflicting_index = torch.zeros(train_num, 1)
+        self.label_index = torch.zeros(train_num).long().to(self.device)
+
+        epoch, cnt = 0, 0
+
+        #### BiasEnsemble ####
+        pseudo_align_flag = self.pretrain_b_ensemble_best(args)
+        mask_index[pseudo_align_flag] = 1
+
+        del self.model_b
+        self.model_b = get_backbone(self.model, self.num_classes, args=self.args, pretrained=self.args.resnet_pretrained).to(self.device)
+
+        self.optimizer_b = torch.optim.Adam(
+                self.model_b.parameters(),
+                lr=args.lr,
+                weight_decay=args.weight_decay,
+            )
+
+        if args.use_lr_decay:
+            self.scheduler_b = optim.lr_scheduler.StepLR(self.optimizer_b, step_size=args.lr_decay_step,gamma=args.lr_gamma)
+            self.scheduler_l = optim.lr_scheduler.StepLR(self.optimizer_d, step_size=args.lr_decay_step,gamma=args.lr_gamma)
+
+        for step in tqdm(range(args.num_steps)):
+            # train main model
+            try:
+                index, data, attr, _ = next(train_iter)
+            except:
+                train_iter = iter(self.train_loader)
+                index, data, attr, _ = next(train_iter)
+
+            data = data.to(self.device)
+            attr = attr.to(self.device)
+            index = index.to(self.device)
+            label = attr[:, args.target_attr_idx]
+            bias_label = attr[:, args.bias_attr_idx]
+
+            flag_conflict = (label != bias_label)
+            flag_conflict_index = index[flag_conflict]
+            self.conflicting_index[flag_conflict_index] = 1
+            self.label_index[index] = label
+
+            logit_b = self.model_b(data)
+            logit_d = self.model_d(data)
+
+            loss_b = self.criterion(logit_b, label).cpu().detach()
+            loss_d = self.criterion(logit_d, label).cpu().detach()
+
+            if np.isnan(loss_b.mean().item()):
+                raise NameError('loss_b')
+            if np.isnan(loss_d.mean().item()):
+                raise NameError('loss_d')
+
+            # EMA sample loss
+            self.sample_loss_ema_b.update(loss_b, index)
+            self.sample_loss_ema_d.update(loss_d, index)
+
+            # class-wise normalize
+            loss_b = self.sample_loss_ema_b.parameter[index].clone().detach()
+            loss_d = self.sample_loss_ema_d.parameter[index].clone().detach()
+
+            if np.isnan(loss_b.mean().item()):
+                raise NameError('loss_b_ema')
+            if np.isnan(loss_d.mean().item()):
+                raise NameError('loss_d_ema')
+
+            label_cpu = label.cpu()
+
+            for c in range(self.num_classes):
+                class_index = np.where(label_cpu == c)[0]
+                max_loss_b = self.sample_loss_ema_b.max_loss(c) + 1e-8
+                max_loss_d = self.sample_loss_ema_d.max_loss(c)
+                loss_b[class_index] /= max_loss_b
+                loss_d[class_index] /= max_loss_d
+
+            # re-weighting based on loss value / generalized CE for biased model
+            loss_weight = loss_b / (loss_b + loss_d + 1e-8)
+            pred = logit_d.data.max(1, keepdim=True)[1].squeeze(1)
+
+
+            if np.isnan(loss_weight.mean().item()):
+                raise NameError('loss_weight')
+
+            curr_align_flag = torch.index_select(mask_index.to(self.device), 0, index)
+            curr_align_flag = (curr_align_flag.squeeze(1) == 1)
+
+            loss_b_update = self.criterion(logit_b[curr_align_flag], label[curr_align_flag])
+            loss_d_update = self.criterion(logit_d, label) * loss_weight.to(self.device)
+
+            if np.isnan(loss_b_update.mean().item()):
+                raise NameError('loss_b_update')
+
+            if np.isnan(loss_d_update.mean().item()):
+                raise NameError('loss_d_update')
+
+            loss = loss_b_update.mean() + loss_d_update.mean()
+            num_updated += loss_weight.mean().item() * data.size(0)
+
+            self.optimizer_b.zero_grad()
+            self.optimizer_d.zero_grad()
+            loss.backward()
+            self.optimizer_b.step()
+            self.optimizer_d.step()
+
+            if args.use_lr_decay:
+                self.scheduler_b.step()
+                self.scheduler_l.step()
+
+            if args.use_lr_decay and step % args.lr_decay_step == 0:
+                print('******* learning rate decay .... ********')
+                print(f"self.optimizer_b lr: {self.optimizer_b.param_groups[-1]['lr']}")
+                print(f"self.optimizer_d lr: {self.optimizer_d.param_groups[-1]['lr']}")
+
+            if step % args.valid_freq == 0:
+                self.board_lff_acc(step)
+
+                if args.use_lr_decay and args.tensorboard:
+                    self.writer.add_scalar(f"loss/learning rate", self.optimizer_d.param_groups[-1]['lr'], step)
+                    
     def train_lff_be_ours(self, args):
         print('Training LfF with BiasEnsemble ...')
 
@@ -815,6 +952,231 @@ class Learner(object):
             curr_align_flag = (curr_align_flag.squeeze(1) == 1)
             
             loss_b_update = self.criterion(logit_b_update[curr_align_flag], label_b[curr_align_flag])
+            loss_d_update = self.criterion(logit_d, label) * loss_weight.to(self.device)
+
+            if np.isnan(loss_b_update.mean().item()):
+                raise NameError('loss_b_update')
+
+            if np.isnan(loss_d_update.mean().item()):
+                raise NameError('loss_d_update')
+
+            loss = loss_b_update.mean() + loss_d_update.mean()
+            num_updated += loss_weight.mean().item() * data.size(0)
+
+            self.optimizer_b.zero_grad()
+            self.optimizer_d.zero_grad()
+            loss.backward()
+            self.optimizer_b.step()
+            self.optimizer_d.step()
+            
+            if args.use_lr_decay:
+                self.scheduler_b.step()
+                self.scheduler_l.step()
+
+            if args.use_lr_decay and step % args.lr_decay_step == 0:
+                print('******* learning rate decay .... ********')
+                print(f"self.optimizer_b lr: {self.optimizer_b.param_groups[-1]['lr']}")
+                print(f"self.optimizer_d lr: {self.optimizer_d.param_groups[-1]['lr']}")
+                    
+            if step % args.valid_freq == 0:
+                self.board_lff_acc(step)
+
+                if args.use_lr_decay and args.tensorboard:
+                    self.writer.add_scalar(f"loss/learning rate", self.optimizer_d.param_groups[-1]['lr'], step)
+
+    def train_lff_ours(self, args):
+        print('Training LfF ...')
+
+        num_updated = 0
+        train_iter = iter(self.train_loader) # Original dataset
+        train_num = len(self.train_dataset.dataset) # num of Original dataset
+        train_g_iter = iter(self.train_g_loader) # Original + Generated dataset
+        
+        del self.model_b
+        self.model_b = get_backbone(self.model, self.num_classes, args=self.args, pretrained=self.args.resnet_pretrained).to(self.device)
+        
+        self.optimizer_b = torch.optim.Adam(
+                self.model_b.parameters(),
+                lr=args.lr,
+                weight_decay=args.weight_decay,
+            )
+        
+        if args.use_lr_decay:
+            self.scheduler_b = optim.lr_scheduler.StepLR(self.optimizer_b, step_size=args.lr_decay_step,gamma=args.lr_gamma)
+            self.scheduler_l = optim.lr_scheduler.StepLR(self.optimizer_d, step_size=args.lr_decay_step,gamma=args.lr_gamma)
+
+        for step in tqdm(range(args.num_steps)):
+            # train main model
+            try:
+                index, data, attr, _ = next(train_g_iter)
+            except:
+                train_g_iter = iter(self.train_g_loader)
+                index, data, attr, _ = next(train_g_iter)
+                
+            data = data.to(self.device)
+            attr = attr.to(self.device)
+            index = index.to(self.device)
+            label = attr[:, args.target_attr_idx]
+
+            with torch.no_grad():
+                logit_b = self.model_b(data)
+            logit_d = self.model_d(data)
+
+            loss_b = self.criterion(logit_b, label).cpu().detach()
+            loss_d = self.criterion(logit_d, label).cpu().detach()
+
+            if np.isnan(loss_b.mean().item()):
+                raise NameError('loss_b')
+            if np.isnan(loss_d.mean().item()):
+                raise NameError('loss_d')
+
+            # EMA sample loss
+            self.sample_loss_ema_b.update(loss_b, index)
+            self.sample_loss_ema_d.update(loss_d, index)
+
+            # class-wise normalize
+            loss_b = self.sample_loss_ema_b.parameter[index].clone().detach()
+            loss_d = self.sample_loss_ema_d.parameter[index].clone().detach()
+
+            if np.isnan(loss_b.mean().item()):
+                raise NameError('loss_b_ema')
+            if np.isnan(loss_d.mean().item()):
+                raise NameError('loss_d_ema')
+
+            label_cpu = label.cpu()
+
+            for c in range(self.num_classes):
+                class_index = np.where(label_cpu == c)[0]
+                max_loss_b = self.sample_loss_ema_b.max_loss(c) + 1e-8
+                max_loss_d = self.sample_loss_ema_d.max_loss(c)
+                loss_b[class_index] /= max_loss_b
+                loss_d[class_index] /= max_loss_d
+
+            # re-weighting based on loss value / generalized CE for biased model
+            loss_weight = loss_b / (loss_b + loss_d + 1e-8)
+
+            if np.isnan(loss_weight.mean().item()):
+                raise NameError('loss_weight')
+            
+            # Biased model(model_b) is trained on original dataset.
+            try:
+                index_b, data_b, attr_b, _ = next(train_iter)
+            except:
+                train_iter = iter(self.train_loader)
+                index_b, data_b, attr_b, _ = next(train_iter)
+                
+            data_b = data_b.to(self.device)
+            attr_b = attr_b.to(self.device)
+            index_b = index_b.to(self.device)
+            label_b = attr_b[:, args.target_attr_idx]
+                
+            logit_b_update = self.model_b(data_b)
+            
+            loss_b_update = self.bias_criterion(logit_b_update, label_b)
+            loss_d_update = self.criterion(logit_d, label) * loss_weight.to(self.device)
+
+            if np.isnan(loss_b_update.mean().item()):
+                raise NameError('loss_b_update')
+
+            if np.isnan(loss_d_update.mean().item()):
+                raise NameError('loss_d_update')
+
+            loss = loss_b_update.mean() + loss_d_update.mean()
+            num_updated += loss_weight.mean().item() * data.size(0)
+
+            self.optimizer_b.zero_grad()
+            self.optimizer_d.zero_grad()
+            loss.backward()
+            self.optimizer_b.step()
+            self.optimizer_d.step()
+            
+            if args.use_lr_decay:
+                self.scheduler_b.step()
+                self.scheduler_l.step()
+
+            if args.use_lr_decay and step % args.lr_decay_step == 0:
+                print('******* learning rate decay .... ********')
+                print(f"self.optimizer_b lr: {self.optimizer_b.param_groups[-1]['lr']}")
+                print(f"self.optimizer_d lr: {self.optimizer_d.param_groups[-1]['lr']}")
+                    
+            if step % args.valid_freq == 0:
+                self.board_lff_acc(step)
+
+                if args.use_lr_decay and args.tensorboard:
+                    self.writer.add_scalar(f"loss/learning rate", self.optimizer_d.param_groups[-1]['lr'], step)
+
+    def train_lff_ours_all(self, args):
+        print('Training LfF ...')
+
+        num_updated = 0
+        train_g_iter = iter(self.train_g_loader) # Original + Generated dataset
+        
+        del self.model_b
+        self.model_b = get_backbone(self.model, self.num_classes, args=self.args, pretrained=self.args.resnet_pretrained).to(self.device)
+        
+        self.optimizer_b = torch.optim.Adam(
+                self.model_b.parameters(),
+                lr=args.lr,
+                weight_decay=args.weight_decay,
+            )
+        
+        if args.use_lr_decay:
+            self.scheduler_b = optim.lr_scheduler.StepLR(self.optimizer_b, step_size=args.lr_decay_step,gamma=args.lr_gamma)
+            self.scheduler_l = optim.lr_scheduler.StepLR(self.optimizer_d, step_size=args.lr_decay_step,gamma=args.lr_gamma)
+
+        for step in tqdm(range(args.num_steps)):
+            # train main model
+            try:
+                index, data, attr, _ = next(train_g_iter)
+            except:
+                train_g_iter = iter(self.train_g_loader)
+                index, data, attr, _ = next(train_g_iter)
+                
+            data = data.to(self.device)
+            attr = attr.to(self.device)
+            index = index.to(self.device)
+            label = attr[:, args.target_attr_idx]
+
+            logit_b = self.model_b(data)
+            logit_d = self.model_d(data)
+
+            loss_b = self.criterion(logit_b, label).cpu().detach()
+            loss_d = self.criterion(logit_d, label).cpu().detach()
+
+            if np.isnan(loss_b.mean().item()):
+                raise NameError('loss_b')
+            if np.isnan(loss_d.mean().item()):
+                raise NameError('loss_d')
+
+            # EMA sample loss
+            self.sample_loss_ema_b.update(loss_b, index)
+            self.sample_loss_ema_d.update(loss_d, index)
+
+            # class-wise normalize
+            loss_b = self.sample_loss_ema_b.parameter[index].clone().detach()
+            loss_d = self.sample_loss_ema_d.parameter[index].clone().detach()
+
+            if np.isnan(loss_b.mean().item()):
+                raise NameError('loss_b_ema')
+            if np.isnan(loss_d.mean().item()):
+                raise NameError('loss_d_ema')
+
+            label_cpu = label.cpu()
+
+            for c in range(self.num_classes):
+                class_index = np.where(label_cpu == c)[0]
+                max_loss_b = self.sample_loss_ema_b.max_loss(c) + 1e-8
+                max_loss_d = self.sample_loss_ema_d.max_loss(c)
+                loss_b[class_index] /= max_loss_b
+                loss_d[class_index] /= max_loss_d
+
+            # re-weighting based on loss value / generalized CE for biased model
+            loss_weight = loss_b / (loss_b + loss_d + 1e-8)
+
+            if np.isnan(loss_weight.mean().item()):
+                raise NameError('loss_weight')
+            
+            loss_b_update = self.bias_criterion(logit_b, label)
             loss_d_update = self.criterion(logit_d, label) * loss_weight.to(self.device)
 
             if np.isnan(loss_b_update.mean().item()):
@@ -1034,6 +1396,214 @@ class Learner(object):
 
                 loss_swap_conflict = self.criterion(pred_mix_conflict, label) * loss_weight.to(self.device)  # Eq.3 W(z)CE(C_i(z_swap),y)
                 loss_swap_align = self.criterion(pred_mix_align[curr_align_flag], label_swap_o[curr_align_flag])
+                lambda_swap = self.args.lambda_swap  # Eq.3 lambda_swap_b
+            else:
+                # before feature-level augmentation
+                loss_swap_conflict = torch.tensor([0]).float()
+                loss_swap_align = torch.tensor([0]).float()
+                lambda_swap = 0
+
+            loss_dis = loss_dis_conflict.mean() + args.lambda_dis_align * loss_dis_align.mean()  # Eq.2 L_dis
+            loss_swap = loss_swap_conflict.mean() + args.lambda_swap_align * loss_swap_align.mean()  # Eq.3 L_swap
+            loss = loss_dis + lambda_swap * loss_swap  # Eq.4 Total objective
+
+            self.optimizer_d.zero_grad()
+            self.optimizer_b.zero_grad()
+            loss.backward()
+            self.optimizer_d.step()
+            self.optimizer_b.step()
+
+            if step >= args.curr_step and args.use_lr_decay:
+                self.scheduler_b.step()
+                self.scheduler_l.step()
+
+            if args.use_lr_decay and step % args.lr_decay_step == 0:
+                print('******* learning rate decay .... ********')
+                print(f"self.optimizer_b lr: {self.optimizer_b.param_groups[-1]['lr']}")
+                print(f"self.optimizer_d lr: {self.optimizer_d.param_groups[-1]['lr']}")
+
+            if step % args.valid_freq == 0:
+                self.board_disent_acc(step)
+                
+    def train_disent_ours(self, args):
+        print('Training DisEnt with BiasEnsemble ...')
+        train_num = len(self.train_dataset)
+
+        # self.model_d   : model for predicting intrinsic attributes ((E_i,C_i) in the main paper)
+        # self.model_d.fc: fc layer for predicting intrinsic attributes (C_i in the main paper)
+        # self.model_b   : model for predicting bias attributes ((E_b, C_b) in the main paper)
+        # self.model_b.fc: fc layer for predicting bias attributes (C_b in the main paper)
+
+        #################
+        # define models
+        #################
+        if args.dataset == 'cmnist' and args.model == 'MLP':
+            model_name = 'mlp_DISENTANGLE'
+        else:
+            model_name = 'resnet_DISENTANGLE'
+
+        print(f'criterion: {self.criterion}')
+        print(f'bias criterion: {self.bias_criterion}')
+
+        train_iter = iter(self.train_loader) # Original dataset
+        train_g_iter = iter(self.train_g_loader) # Original + Our dataset
+        train_num = len(self.train_dataset.dataset)
+
+        self.conflicting_index = torch.zeros(train_num, 1)
+        self.label_index = torch.zeros(train_num).long().to(self.device)
+
+        mask_index = torch.zeros(train_num, 1)
+
+        del self.model_b
+        self.model_b = get_model(model_name, self.num_classes).to(self.device)
+        self.model_d = get_model(model_name, self.num_classes).to(self.device)
+
+        ##################
+        # define optimizer
+        ##################
+
+        self.optimizer_d = torch.optim.Adam(
+            self.model_d.parameters(),
+            lr=args.lr,
+            weight_decay=args.weight_decay,
+        )
+
+        self.optimizer_b = torch.optim.Adam(
+            self.model_b.parameters(),
+            lr=args.lr,
+            weight_decay=args.weight_decay,
+        )
+
+        if args.use_lr_decay:
+            self.scheduler_b = optim.lr_scheduler.StepLR(self.optimizer_b, step_size=args.lr_decay_step,
+                                                         gamma=args.lr_gamma)
+            self.scheduler_l = optim.lr_scheduler.StepLR(self.optimizer_d, step_size=args.lr_decay_step,
+                                                         gamma=args.lr_gamma)
+
+        for step in tqdm(range(args.num_steps)):
+            # Load a batch from original + ours
+            try:
+                index, data, attr, image_path = next(train_g_iter)
+            except:
+                train_g_iter = iter(self.train_g_loader)
+                index, data, attr, image_path = next(train_g_iter)
+
+            data = data.to(self.device)
+            attr = attr.to(self.device)
+            index = index.to(self.device)
+            label = attr[:, args.target_attr_idx].to(self.device)
+
+            # Feature extraction
+            # Prediction by concatenating zero vectors (dummy vectors).
+            # We do not use the prediction here.
+            if args.dataset == 'cmnist' and args.model == 'MLP':
+                z_l = self.model_d.extract(data)
+                with torch.no_grad():
+                    z_b = self.model_b.extract(data)
+            else:
+                with torch.no_grad():
+                    z_b = []
+                    hook_fn = self.model_b.avgpool.register_forward_hook(self.concat_dummy(z_b))
+                    _ = self.model_b(data)
+                    hook_fn.remove()
+                    z_b = z_b[0]
+
+                z_l = []
+                hook_fn = self.model_d.avgpool.register_forward_hook(self.concat_dummy(z_l))
+                _ = self.model_d(data)
+                hook_fn.remove()
+
+                z_l = z_l[0]
+
+            # z=[z_l, z_b]
+            # Gradients of z_b are not backpropagated to z_l (and vice versa) in order to guarantee disentanglement of representation.
+            z_conflict = torch.cat((z_l, z_b.detach()), dim=1)
+            z_align = torch.cat((z_l.detach(), z_b), dim=1)
+
+            # Prediction using z=[z_l, z_b]
+            pred_conflict = self.model_d.fc(z_conflict)
+            with torch.no_grad():
+                pred_align = self.model_b.fc(z_align)
+
+            loss_dis_conflict = self.criterion(pred_conflict, label).detach()
+            loss_dis_align = self.criterion(pred_align, label).detach()
+
+            # EMA sample loss
+            self.sample_loss_ema_d.update(loss_dis_conflict, index)
+            self.sample_loss_ema_b.update(loss_dis_align, index)
+
+            # class-wise normalize
+            loss_dis_conflict = self.sample_loss_ema_d.parameter[index].clone().detach()
+            loss_dis_align = self.sample_loss_ema_b.parameter[index].clone().detach()
+
+            loss_dis_conflict = loss_dis_conflict.to(self.device)
+            loss_dis_align = loss_dis_align.to(self.device)
+
+            for c in range(self.num_classes):
+                class_index = torch.where(label == c)[0].to(self.device)
+                max_loss_conflict = self.sample_loss_ema_d.max_loss(c)
+                max_loss_align = self.sample_loss_ema_b.max_loss(c)
+                loss_dis_conflict[class_index] /= max_loss_conflict
+                loss_dis_align[class_index] /= max_loss_align
+
+            loss_weight = loss_dis_align / (loss_dis_align + loss_dis_conflict + 1e-8)  # Eq.1 (reweighting module) in the main paper
+            loss_dis_conflict = self.criterion(pred_conflict, label) * loss_weight.to(self.device)  # Eq.2 W(z)CE(C_i(z),y)
+
+            # For B.Nets load a batch from original dataset
+            try:
+                index_o, data_o, attr_o, image_path_o = next(train_iter)
+            except:
+                train_iter = iter(self.train_loader)
+                index_o, data_o, attr_o, image_path_o = next(train_iter)
+
+            data_o = data_o.to(self.device)
+            attr_o = attr_o.to(self.device)
+            index_o = index_o.to(self.device)
+            label_o = attr_o[:, args.target_attr_idx].to(self.device)
+
+            if args.dataset == 'cmnist' and args.model == 'MLP':
+                with torch.no_grad():
+                    z_l_o = self.model_d.extract(data_o)
+                z_b_o = self.model_b.extract(data_o)
+            else:
+                z_b_o = []
+                hook_fn = self.model_b.avgpool.register_forward_hook(self.concat_dummy(z_b_o))
+                _ = self.model_b(data_o)
+                hook_fn.remove()
+
+                z_b_o = z_b_o[0]
+                with torch.no_grad():
+                    z_l_o = []
+                    hook_fn = self.model_d.avgpool.register_forward_hook(self.concat_dummy(z_l_o))
+                    _ = self.model_d(data_o)
+                    hook_fn.remove()
+
+                    z_l_o = z_l_o[0]
+
+            z_align_o = torch.cat((z_l_o.detach(), z_b_o), dim=1)
+            pred_align_o = self.model_b.fc(z_align_o)
+            loss_dis_align = self.criterion(pred_align_o, label_o)
+
+            # feature-level augmentation : augmentation after certain iteration (after representation is disentangled at a certain level)
+            if step > args.curr_step:
+                indices = np.random.permutation(z_b.size(0))
+                z_b_swap = z_b[indices]  # z tilde
+
+                indices_o = np.random.permutation(z_b_o.size(0))
+                z_b_swap_o = z_b_o[indices_o]  # z tilde
+                label_swap_o = label_o[indices_o]  # y tilde
+
+                # Prediction using z_swap=[z_l, z_b tilde]
+                # Again, gradients of z_b tilde are not backpropagated to z_l (and vice versa) in order to guarantee disentanglement of representation.
+                z_mix_conflict = torch.cat((z_l, z_b_swap.detach()), dim=1)
+                z_mix_align = torch.cat((z_l_o.detach(), z_b_swap_o), dim=1)
+
+                # Prediction using z_swap
+                pred_mix_conflict = self.model_d.fc(z_mix_conflict)
+                pred_mix_align = self.model_b.fc(z_mix_align)
+
+                loss_swap_conflict = self.criterion(pred_mix_conflict, label) * loss_weight.to(self.device)  # Eq.3 W(z)CE(C_i(z_swap),y)
+                loss_swap_align = self.criterion(pred_mix_align, label_swap_o)
                 lambda_swap = self.args.lambda_swap  # Eq.3 lambda_swap_b
             else:
                 # before feature-level augmentation

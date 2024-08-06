@@ -38,7 +38,7 @@ def get_backbone(model_key, num_classes, pretrained=False, first_stage=False, ar
         print(f'Resnet18 pretrained {pretrained} loaded...')
         model = resnet18(pretrained=pretrained)
         feature_dim = 512
-        if args.train_disent_be_ours and first_stage == False:
+        if (args.train_disent_be_ours or args.train_disent_ours) and first_stage == False:
             feature_dim = 1024
     if 'ResNet' in model_key:
         model.fc = nn.Linear(feature_dim, num_classes)

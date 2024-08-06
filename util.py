@@ -3,13 +3,13 @@
 import torch
 
 class EMA:
-    def __init__(self, label, num_classes=None, alpha=0.9):
-        self.label = label.cuda()
+    def __init__(self, label, num_classes=None, alpha=0.9, device='cuda'):
+        self.label = label.to(device)
         self.alpha = alpha
         self.parameter = torch.zeros(label.size(0))
         self.updated = torch.zeros(label.size(0))
         self.num_classes = num_classes
-        self.max = torch.zeros(self.num_classes).cuda()
+        self.max = torch.zeros(self.num_classes).to(device)
 
     def update(self, data, index, curve=None, iter_range=None, step=None):
         self.parameter = self.parameter.to(data.device)
