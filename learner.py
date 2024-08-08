@@ -5,11 +5,13 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import wandb
+import json
+import torch.nn.functional as F
 
 import os
 import torch.optim as optim
 
-from data.util import get_dataset, IdxDataset
+from data.util import get_dataset, IdxDataset, MixupModule
 from module.loss import GeneralizedCELoss
 from module.util import get_model
 from module.util import get_backbone
@@ -18,6 +20,18 @@ from util import *
 import warnings
 warnings.filterwarnings(action='ignore')
 import copy
+
+def load_json(json_path: str):
+    if os.path.exists(json_path):
+        with open(json_path, 'r') as file:
+            try:
+                json_file = json.load(file)
+            except json.JSONDecodeError:
+                raise RuntimeError("An error occurred while loading the existing json file.")
+    else:
+        raise RuntimeError(f".json does not exist.\nPath: {json_path}")
+    
+    return json_file
 
 class Learner(object):
     def __init__(self, args):
@@ -42,6 +56,13 @@ class Learner(object):
                            'bffhq': True,
                            'dogs_and_cats':True,
                            'cifar10c': True
+                          }
+        
+        data2num_class = {'cmnist': 10,
+                          'bar': 6,
+                          'bffhq': 2,
+                          'dogs_and_cats':2,
+                          'cifar10c': 10
                           }
 
         run_name = args.exp
@@ -74,6 +95,8 @@ class Learner(object):
             transform_split="train",
             percent=args.percent,
             use_preprocess=data2preprocess[args.dataset],
+            preproc_dir = args.preproc_dir,
+            mixup=args.mixup
         )
         self.train_g_dataset = get_dataset(
             dataset=args.dataset,
@@ -83,7 +106,8 @@ class Learner(object):
             percent=args.percent,
             use_preprocess=data2preprocess[args.dataset],
             include_generated=True,
-            preproc_dir=self.args.preproc_dir
+            preproc_dir=self.args.preproc_dir,
+            mixup=args.mixup
         )
         self.valid_dataset = get_dataset(
             dataset=args.dataset,
@@ -101,6 +125,9 @@ class Learner(object):
             percent=args.percent,
             use_preprocess=data2preprocess[args.dataset],
         )
+
+        if args.mixup:
+            self.mixup_module = MixupModule(dataset=self.train_dataset, num_class=data2num_class[args.dataset])
 
         train_target_attr = []
         for data in self.train_dataset.data:
@@ -204,6 +231,19 @@ class Learner(object):
         self.best_valid_acc_b, self.best_test_acc_b = 0., 0.
         self.best_valid_acc_d, self.best_test_acc_d = 0., 0.
         
+        # if self.args.mixup:
+        #     img2attr = {}
+        #     original_class_bias_stats_path = os.path.join(self.args.preproc_dir, self.args.dataset, self.args.percent, 'original_class_bias_stats.json')
+        #     self.original_class_bias_stats = load_json(original_class_bias_stats_path)
+            
+        #     generated_class_bias_stats_path = os.path.join(self.args.preproc_dir, self.args.dataset, self.args.percent, 'generated_class_bias_stats.json')
+        #     self.generated_class_bias_stats = load_json(generated_class_bias_stats_path) # generated_class_bias_stats[class][bias_attr]
+            
+        #     for class_idx in self.original_class_bias_stats:
+        #         for bias_attr in self.original_class_bias_stats[class_idx]:
+        #             for sample_path in self.original_class_bias_stats[class_idx][bias_attr]:
+        #                 img2attr[sample_path] = bias_attr
+                    
         print('finished model initialization....')
         
     def wandb_switch(self, switch):
@@ -689,7 +729,7 @@ class Learner(object):
     
     def train_vanilla(self, args, origin_only=False):
         print("training vanilla ...")
-        
+        # MIXUP
         if origin_only:
             train_iter = iter(self.train_loader)
         else:
@@ -702,13 +742,25 @@ class Learner(object):
                 train_iter = iter(self.train_loader)
                 index, data, attr, _ = next(train_iter)
 
-            data = data.to(self.device)
-            attr = attr.to(self.device)
-            label = attr[:, args.target_attr_idx]
+            lam = np.random.beta(2, 2)
+            p = np.random.rand()
+
+            mixed_x_list = []
+            mixed_y_list = []
+
+            for i in range(data.size(0)):
+                mixed_x, mixed_y = self.mixup_module.mixup(index=index[i], p=p, lam=lam)
+                mixed_x_list.append(mixed_x.unsqueeze(0))
+                mixed_y_list.append(mixed_y.unsqueeze(0))
+
+            data = torch.cat(mixed_x_list, dim=0).to(self.device)
+            label_soft = torch.cat(mixed_y_list, dim=0).to(self.device)
 
             logit_d = self.model_d(data)
-            loss_d_update = self.criterion(logit_d, label)
-            loss = loss_d_update.mean()
+
+            log_probs = F.log_softmax(logit_d, dim=-1)
+            per_sample_losses = -log_probs * label_soft
+            loss = per_sample_losses.sum(dim=-1).mean()
 
             self.optimizer_d.zero_grad()
             loss.backward()
@@ -1074,6 +1126,149 @@ class Learner(object):
             
             loss_b_update = self.bias_criterion(logit_b_update, label_b)
             loss_d_update = self.criterion(logit_d, label) * loss_weight.to(self.device)
+
+            if np.isnan(loss_b_update.mean().item()):
+                raise NameError('loss_b_update')
+
+            if np.isnan(loss_d_update.mean().item()):
+                raise NameError('loss_d_update')
+
+            loss = loss_b_update.mean() + loss_d_update.mean()
+            num_updated += loss_weight.mean().item() * data.size(0)
+
+            self.optimizer_b.zero_grad()
+            self.optimizer_d.zero_grad()
+            loss.backward()
+            self.optimizer_b.step()
+            self.optimizer_d.step()
+            
+            if args.use_lr_decay:
+                self.scheduler_b.step()
+                self.scheduler_l.step()
+
+            if args.use_lr_decay and step % args.lr_decay_step == 0:
+                print('******* learning rate decay .... ********')
+                print(f"self.optimizer_b lr: {self.optimizer_b.param_groups[-1]['lr']}")
+                print(f"self.optimizer_d lr: {self.optimizer_d.param_groups[-1]['lr']}")
+                    
+            if step % args.valid_freq == 0:
+                self.board_lff_acc(step)
+
+                if args.use_lr_decay and args.tensorboard:
+                    self.writer.add_scalar(f"loss/learning rate", self.optimizer_d.param_groups[-1]['lr'], step)
+
+    def train_lff_ours_mixup(self, args):
+        print('Training LfF ...')
+
+        num_updated = 0
+        train_iter = iter(self.train_loader) # Original dataset
+        train_num = len(self.train_dataset.dataset) # num of Original dataset
+        
+        del self.model_b
+        self.model_b = get_backbone(self.model, self.num_classes, args=self.args, pretrained=self.args.resnet_pretrained).to(self.device)
+        
+        self.optimizer_b = torch.optim.Adam(
+                self.model_b.parameters(),
+                lr=args.lr,
+                weight_decay=args.weight_decay,
+            )
+        
+        if args.use_lr_decay:
+            self.scheduler_b = optim.lr_scheduler.StepLR(self.optimizer_b, step_size=args.lr_decay_step,gamma=args.lr_gamma)
+            self.scheduler_l = optim.lr_scheduler.StepLR(self.optimizer_d, step_size=args.lr_decay_step,gamma=args.lr_gamma)
+
+        for step in tqdm(range(args.num_steps)):
+            # train main model
+            try:
+                index, data, attr, _ = next(train_iter)
+            except:
+                train_iter = iter(self.train_loader)
+                index, data, attr, _ = next(train_iter)
+
+            lam = np.random.beta(2, 2)
+            p = np.random.rand()
+
+            mixed_x_list = []
+            mixed_y_list = []
+
+            for i in range(data.size(0)):
+                mixed_x, mixed_y = self.mixup_module.mixup(index=index[i], p=p, lam=lam)
+                mixed_x_list.append(mixed_x.unsqueeze(0))
+                mixed_y_list.append(mixed_y.unsqueeze(0))
+
+            data = torch.cat(mixed_x_list, dim=0).to(self.device)
+            label_soft = torch.cat(mixed_y_list, dim=0).to(self.device)
+                
+            data = data.to(self.device)
+            attr = attr.to(self.device)
+            index = index.to(self.device)
+            label = attr[:, args.target_attr_idx]
+
+            with torch.no_grad():
+                logit_b = self.model_b(data)
+            logit_d = self.model_d(data)
+
+            log_probs_b = F.log_softmax(logit_b, dim=-1)
+            per_sample_losses_b = -log_probs_b * label_soft
+            loss_b = per_sample_losses_b.sum(-1).cpu().detach()
+
+            log_probs_d = F.log_softmax(logit_d, dim=-1)
+            per_sample_losses_d = -log_probs_d * label_soft
+            loss_d = per_sample_losses_d.sum(-1).cpu().detach()
+
+            if np.isnan(loss_b.mean().item()):
+                raise NameError('loss_b')
+            if np.isnan(loss_d.mean().item()):
+                raise NameError('loss_d')
+
+            if args.ema:
+                # EMA sample loss
+                self.sample_loss_ema_b.update(loss_b, index)
+                self.sample_loss_ema_d.update(loss_d, index)
+
+                # class-wise normalize
+                loss_b = self.sample_loss_ema_b.parameter[index].clone().detach()
+                loss_d = self.sample_loss_ema_d.parameter[index].clone().detach()
+
+                if np.isnan(loss_b.mean().item()):
+                    raise NameError('loss_b_ema')
+                if np.isnan(loss_d.mean().item()):
+                    raise NameError('loss_d_ema')
+
+                label_cpu = label.cpu()
+
+                for c in range(self.num_classes):
+                    class_index = np.where(label_cpu == c)[0]
+                    max_loss_b = self.sample_loss_ema_b.max_loss(c) + 1e-8
+                    max_loss_d = self.sample_loss_ema_d.max_loss(c)
+                    loss_b[class_index] /= max_loss_b
+                    loss_d[class_index] /= max_loss_d
+
+            # re-weighting based on loss value / generalized CE for biased model
+            loss_weight = loss_b / (loss_b + loss_d + 1e-8)
+
+            if np.isnan(loss_weight.mean().item()):
+                raise NameError('loss_weight')
+            
+            # Biased model(model_b) is trained on original dataset.
+            try:
+                index_b, data_b, attr_b, _ = next(train_iter)
+            except:
+                train_iter = iter(self.train_loader)
+                index_b, data_b, attr_b, _ = next(train_iter)
+                
+            data_b = data_b.to(self.device)
+            attr_b = attr_b.to(self.device)
+            index_b = index_b.to(self.device)
+            label_b = attr_b[:, args.target_attr_idx]
+                
+            logit_b_update = self.model_b(data_b)
+            
+            loss_b_update = self.bias_criterion(logit_b_update, label_b)
+
+            log_probs_d = F.log_softmax(logit_d, dim=-1)
+            per_sample_losses_d = -log_probs_d * label_soft
+            loss_d_update = per_sample_losses_d.sum(-1) * loss_weight.to(self.device)
 
             if np.isnan(loss_b_update.mean().item()):
                 raise NameError('loss_b_update')

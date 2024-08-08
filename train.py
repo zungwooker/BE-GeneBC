@@ -52,6 +52,7 @@ if __name__ == '__main__':
     parser.add_argument("--model", help="which network, [MLP, ResNet18]", default= 'MLP', type=str)
     parser.add_argument("--tensorboard_dir", help="tensorboard directory", default= 'summary', type=str)
     parser.add_argument("--lr_decay", action="store_true")
+    parser.add_argument("--mixup", action="store_true")
 
     # logging
     parser.add_argument("--log_dir", help='path for saving model', default='./log', type=str)
@@ -65,6 +66,7 @@ if __name__ == '__main__':
     parser.add_argument("--train_vanilla_ours", action="store_true", help="whether to train vanilla + ours")
     parser.add_argument("--train_lff_be_ours", action="store_true", help="whether to train BE + LfF + ours")
     parser.add_argument("--train_lff_be_ours_all", action="store_true", help="whether to train BE + LfF + ours")
+    parser.add_argument("--train_lff_ours_mixup", action="store_true", help="whether to train BE + LfF + ours")
     parser.add_argument("--train_lff_ours", action="store_true", help="whether to train LfF + ours")
     parser.add_argument("--train_lff_ours_all", action="store_true", help="whether to train LfF + ours")
     parser.add_argument("--train_disent_be_ours", action="store_true", help="whether to train BE + DisEnt + ours")
@@ -116,6 +118,8 @@ if __name__ == '__main__':
         learner.train_lff_be_ours_all(args)
     elif args.train_lff_ours:
         learner.train_lff_ours(args)
+    elif args.train_lff_ours_mixup:
+        learner.train_lff_ours_mixup(args)
     elif args.train_lff_ours_all:
         learner.train_lff_ours_all(args)
     elif args.train_disent_be_ours:

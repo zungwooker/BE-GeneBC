@@ -21,17 +21,17 @@
 
 python train.py \
     --gpu_num 1 \
-    --train_lff_ours \
+    --train_lff_ours_mixup \
     --data_dir '/home/zungwooker/Debiasing/benchmarks' \
     --device 'cuda' \
     --dataset=cmnist \
-    --percent=0.5pct \
+    --percent=5pct \
     --lr=0.01 \
-    --exp=lff_be_gene_cmnist_0.5 \
-    --num_steps 50000 \
+    --exp=lff_be_gene_cmnist_5 \
     --projcode 'LFF-OURS-CMNIST' \
     --run_name '0.5pct Origin+Gene, B.Net & BCDs get only original dataset' \
     --preproc_dir '/home/zungwooker/Debiasing/preproc' \
-    --ema \
     --fix_randomseed \
-    --seed 0
+    --seed 0 \
+    --mixup \
+    --ema

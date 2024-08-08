@@ -9,6 +9,158 @@ from PIL import Image
 import json
 import random
 import numpy as np
+from copy import deepcopy
+
+def load_json(json_path: str):
+    if os.path.exists(json_path):
+        with open(json_path, 'r') as file:
+            try:
+                json_file = json.load(file)
+            except json.JSONDecodeError:
+                raise RuntimeError("An error occurred while loading the existing json file.")
+    else:
+        raise RuntimeError(f".json does not exist.\nPath: {json_path}")
+    
+    return json_file
+
+class MixupModule():
+    def __init__(self, dataset, num_class) -> None:
+        self.dataset = dataset
+        self.num_class = num_class
+
+    # Mixup functions
+    def type1(self, index):
+        base_sample = self.dataset.data[index].replace(self.dataset.root+'/', '')
+        class_idx = str(base_sample.split('_')[-2])
+        if self.dataset.origin2gene[base_sample]:
+            generated_sample = random.choice(self.dataset.origin2gene[base_sample])
+            return [self.dataset.data[index], os.path.join(self.dataset.preproc_root, generated_sample)], [class_idx, class_idx]
+        else:
+            return [self.dataset.data[index], self.dataset.data[index]], [class_idx, class_idx]
+        
+    def type2(self, index):
+        base_sample = self.dataset.data[index].replace(self.dataset.root+'/', '')
+        class_idx = str(base_sample.split('_')[-2])
+        bias_conflict_attr = random.choice(list(self.dataset.itg_tag_stats[class_idx]['bias_conflict_tags']))
+        if self.dataset.original_class_bias_stats[class_idx][bias_conflict_attr]:
+            c_pos_sample = random.choice(self.dataset.original_class_bias_stats[class_idx][bias_conflict_attr])
+            return [self.dataset.data[index], os.path.join(self.dataset.root, c_pos_sample)], [class_idx, class_idx]
+        else:
+            return [self.dataset.data[index], self.dataset.data[index]], [class_idx, class_idx]
+
+    def type3(self, index):
+        base_sample = self.dataset.data[index].replace(self.dataset.root+'/', '')
+        class_idx = str(base_sample.split('_')[-2])
+        bias_attr = list(self.dataset.itg_tag_stats[class_idx]['bias_tags'])[0]
+        if self.dataset.original_class_bias_stats[class_idx][bias_attr]:
+            pos_sample = random.choice(self.dataset.original_class_bias_stats[class_idx][bias_attr])
+        else:
+            return [self.dataset.data[index], self.dataset.data[index]], [class_idx, class_idx]
+        
+        if self.dataset.origin2gene[pos_sample]:
+            generated_sample = random.choice(self.dataset.origin2gene[pos_sample])
+            return [self.dataset.data[index], os.path.join(self.dataset.preproc_root, generated_sample)], [class_idx, class_idx]
+        else:
+            return [self.dataset.data[index], self.dataset.data[index]], [class_idx, class_idx]
+        
+    def type4(self, index):
+        base_sample = self.dataset.data[index].replace(self.dataset.root+'/', '')
+        class_idx = str(base_sample.split('_')[-2])
+        bias_conflict_attr1 = random.choice(list(self.dataset.itg_tag_stats[class_idx]['bias_conflict_tags']))
+        bias_conflict_attr2 = random.choice(list(self.dataset.itg_tag_stats[class_idx]['bias_conflict_tags']))
+        generated_sample1 = random.choice(self.dataset.generated_class_bias_stats[class_idx][bias_conflict_attr1])
+        generated_sample2 = random.choice(self.dataset.generated_class_bias_stats[class_idx][bias_conflict_attr2])
+
+        return [os.path.join(self.dataset.preproc_root, generated_sample1), os.path.join(self.dataset.preproc_root, generated_sample2)], [class_idx, class_idx]
+
+    def type5(self, index):
+        base_sample = self.dataset.data[index].replace(self.dataset.root+'/', '')
+        class_idx = str(base_sample.split('_')[-2])
+        bias_attr = list(self.dataset.itg_tag_stats[class_idx]['bias_tags'])[0]
+
+        class_candidates = [str(i) for i in range(self.num_class)]
+        class_candidates.remove(class_idx)
+        c_neg_class = random.choice(class_candidates)
+
+        c_neg_sample_candidates = self.dataset.original_class_bias_stats[c_neg_class][bias_attr]
+        if c_neg_sample_candidates:
+            c_neg_sample = random.choice(c_neg_sample_candidates)
+            return [self.dataset.data[index], os.path.join(self.dataset.root, c_neg_sample)], [class_idx, c_neg_class]
+        else:
+            return [self.dataset.data[index], self.dataset.data[index]], [class_idx, class_idx]
+        
+    def type6(self, index):
+        base_sample = self.dataset.data[index].replace(self.dataset.root+'/', '')
+        class_idx = str(base_sample.split('_')[-2])
+        bias_attr = list(self.dataset.itg_tag_stats[class_idx]['bias_tags'])[0]
+
+        class_candidates = [str(i) for i in range(self.num_class)]
+        class_candidates.remove(class_idx)
+        c_neg_class = random.choice(class_candidates)
+
+        c_neg_generated_candidates = self.dataset.generated_class_bias_stats[c_neg_class][bias_attr]
+        if c_neg_generated_candidates:
+            neg_sample = random.choice(c_neg_generated_candidates)
+            return [self.dataset.data[index], os.path.join(self.dataset.preproc_root, neg_sample)], [class_idx, c_neg_class]
+        else:
+            return [self.dataset.data[index], self.dataset.data[index]], [class_idx, class_idx]
+        
+    def type7(self, index):
+        base_sample = self.dataset.data[index].replace(self.dataset.root+'/', '')
+        class_idx = str(base_sample.split('_')[-2])
+        bias_attr = list(self.dataset.itg_tag_stats[class_idx]['bias_tags'])[0]
+
+        class_candidates = [str(i) for i in range(self.num_class)]
+        class_candidates.remove(class_idx)
+        c_neg_class1 = random.choice(class_candidates)
+        c_neg_class2 = random.choice(class_candidates)
+
+        c_neg_generated_candidates1 = self.dataset.generated_class_bias_stats[c_neg_class1][bias_attr]
+        if c_neg_generated_candidates1:
+            c_neg_sample1 = os.path.join(self.dataset.preproc_root, random.choice(c_neg_generated_candidates1))
+            c_neg_sample1_label = c_neg_class1
+        else:
+            c_neg_sample1 = self.dataset.data[index]
+            c_neg_sample1_label = class_idx
+
+        c_neg_generated_candidates2 = self.dataset.generated_class_bias_stats[c_neg_class2][bias_attr]
+        if c_neg_generated_candidates2:
+            c_neg_sample2 = os.path.join(self.dataset.preproc_root, random.choice(c_neg_generated_candidates2))
+            c_neg_sample2_label = c_neg_class2
+        else:
+            c_neg_sample2 = self.dataset.data[index]
+            c_neg_sample2_label = class_idx
+
+        return [c_neg_sample1, c_neg_sample2], [c_neg_sample1_label, c_neg_sample2_label]
+    
+    def mixup(self, index, p, lam, mix_ratio=0.5):
+        if p < mix_ratio:
+            mixup_functions = [self.type1, self.type2, self.type3, self.type4]
+        else:
+            mixup_functions = [self.type5, self.type6, self.type7]
+
+        mixup_function = random.choice(mixup_functions)
+        samples, labels = mixup_function(index)
+
+        image0 = Image.open(samples[0]).convert('RGB')
+        image1 = Image.open(samples[1]).convert('RGB')
+
+        if self.dataset.transform is not None:
+            image0 = self.dataset.transform(image0)
+            image1 = self.dataset.transform(image1)
+
+        y0 = torch.nn.functional.one_hot(torch.tensor(int(labels[0])), num_classes=self.num_class)
+        y1 = torch.nn.functional.one_hot(torch.tensor(int(labels[1])), num_classes=self.num_class)
+
+        # # mixed_input = l * x + (1 - l) * x2
+        # mixed_x = torch.tensor(lam, dtype=torch.float32).to(image0.device) * image0 + torch.tensor(1-lam, dtype=torch.float32).to(image1.device) * image1
+        # mixed_y = torch.tensor(lam, dtype=torch.float32).to(y0.device) * y0 + torch.tensor(1-lam, dtype=torch.float32).to(y1.device) * y1
+
+        mixed_x = lam * image0 + (1 - lam) * image1
+        mixed_y = lam * y0 + (1 - lam) * y1
+        
+        return mixed_x, mixed_y
+
 
 class IdxDataset(Dataset):
     def __init__(self, dataset):
@@ -46,13 +198,38 @@ class CMNISTDataset(Dataset):
                  transform=None, 
                  image_path_list=None, 
                  include_generated=False, 
-                 preproc_root=None):
+                 preproc_root=None,
+                 mixup=False):
         super(CMNISTDataset, self).__init__()
         self.transform = transform
         self.root = root
         self.image2pseudo = {}
         self.image_path_list = image_path_list
         self.preproc_root = preproc_root
+        self.mixup = mixup
+        
+        if self.mixup:
+            self.img2attr = {}
+            original_class_bias_stats_path = os.path.join(preproc_root, 'original_class_bias_stats.json')
+            self.original_class_bias_stats = load_json(original_class_bias_stats_path)
+            
+            generated_class_bias_stats_path = os.path.join(preproc_root, 'generated_class_bias_stats.json')
+            self.generated_class_bias_stats = load_json(generated_class_bias_stats_path) # generated_class_bias_stats[class][bias_attr]
+            
+            itg_tag_stats_path = os.path.join(preproc_root, 'tag_stats.json')
+            self.itg_tag_stats = load_json(itg_tag_stats_path)
+            
+            origin2gene_path = os.path.join(preproc_root, 'origin2gene.json')
+            self.origin2gene = load_json(origin2gene_path)
+            
+            self.class_biases = [self.itg_tag_stats[str(class_idx)]['bias_tags'] for class_idx in range(10)]
+            self.class_biases.append('none')
+            self.class_biases = list(set([bias for sublist in self.class_biases for bias in sublist]))
+            
+            for class_idx in self.original_class_bias_stats:
+                for bias_attr in self.original_class_bias_stats[class_idx]:
+                    for sample_path in self.original_class_bias_stats[class_idx][bias_attr]:
+                        self.img2attr[sample_path] = bias_attr
 
         if split=='train':
             self.align = glob(os.path.join(root, 'align', '*', '*'))
@@ -70,7 +247,7 @@ class CMNISTDataset(Dataset):
 
     def __len__(self):
         return len(self.data)
-
+        
     def __getitem__(self, index):
         attr = torch.LongTensor([int(self.data[index].split('_')[-2]),int(self.data[index].split('_')[-1].split('.')[0])])
         image = Image.open(self.data[index]).convert('RGB')
@@ -88,7 +265,8 @@ class bFFHQDataset(Dataset):
                  transform=None, 
                  image_path_list=None, 
                  include_generated=False, 
-                 preproc_root=None):
+                 preproc_root=None,
+                 mixup=False):
         super(bFFHQDataset, self).__init__()
         self.transform = transform
         self.root = root
@@ -138,7 +316,8 @@ class BARDataset(Dataset):
                  transform=None, 
                  image_path_list=None, 
                  include_generated=False, 
-                 preproc_root=None):
+                 preproc_root=None,
+                 mixup=False):
         super(BARDataset, self).__init__()
         self.transform = transform
         self.root = root
@@ -187,7 +366,8 @@ class DogCatDataset(Dataset):
                  transform=None, 
                  image_path_list=None, 
                  include_generated=False, 
-                 preproc_root=None):
+                 preproc_root=None,
+                 mixup=False):
         super(DogCatDataset, self).__init__()
         self.transform = transform
         self.root = root
@@ -229,7 +409,8 @@ class CIFAR10CDataset(Dataset):
                  transform=None, 
                  image_path_list=None, 
                  include_generated=False, 
-                 preproc_root=None):
+                 preproc_root=None,
+                 mixup=False):
         super(CIFAR10CDataset, self).__init__()
         self.transform = transform
         self.root = root
@@ -382,7 +563,8 @@ def get_dataset(dataset,
                 use_preprocess=None, 
                 image_path_list=None, 
                 include_generated=False, 
-                preproc_dir='none'):
+                preproc_dir='none',
+                mixup=False):
 
     dataset_category = dataset.split("-")[0]
     if use_preprocess:
@@ -399,7 +581,8 @@ def get_dataset(dataset,
                                 transform=transform, 
                                 image_path_list=image_path_list, 
                                 include_generated=include_generated, 
-                                preproc_root=preproc_root)
+                                preproc_root=preproc_root,
+                                mixup=mixup)
         
     elif dataset == "bffhq":
         root = data_dir + f"/bffhq/{percent}"
@@ -408,7 +591,8 @@ def get_dataset(dataset,
                                transform=transform, 
                                image_path_list=image_path_list, 
                                include_generated=include_generated, 
-                               preproc_root=preproc_root)
+                               preproc_root=preproc_root,
+                               mixup=mixup)
         
     elif dataset == "bar":
         root = data_dir + f"/bar/{percent}"
@@ -417,7 +601,8 @@ def get_dataset(dataset,
                              transform=transform, 
                              image_path_list=image_path_list, 
                              include_generated=include_generated, 
-                             preproc_root=preproc_root)
+                             preproc_root=preproc_root,
+                             mixup=mixup)
         
     elif dataset == "dogs_and_cats":
         root = data_dir + f"/dogs_and_cats/{percent}"
@@ -426,7 +611,8 @@ def get_dataset(dataset,
                                 transform=transform, 
                                 image_path_list=image_path_list, 
                                 include_generated=include_generated, 
-                                preproc_root=preproc_root)
+                                preproc_root=preproc_root,
+                                mixup=mixup)
         
     elif dataset == "cifar10c":
         root = data_dir + f"/cifar10c/{percent}"
@@ -435,7 +621,8 @@ def get_dataset(dataset,
                                   transform=transform, 
                                   image_path_list=image_path_list, 
                                   include_generated=include_generated, 
-                                  preproc_root=preproc_root)
+                                  preproc_root=preproc_root,
+                                  mixup=mixup)
     else:
         print('wrong dataset ...')
         import sys
