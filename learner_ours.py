@@ -89,6 +89,7 @@ class LearnerOurs(object):
         os.makedirs(self.result_dir, exist_ok=True)
 
         self.train_dataset = get_dataset(
+            args=args,
             dataset=args.dataset,
             data_dir=args.data_dir,
             dataset_split="train",
@@ -96,43 +97,42 @@ class LearnerOurs(object):
             percent=args.percent,
             use_preprocess=data2preprocess[args.dataset],
             preproc_dir = args.preproc_dir,
-            mixup=args.mixup,
-            only_tags=args.only_tags
+            origin_only = True
         )
         self.train_g_dataset = get_dataset(
+            args=args,
             dataset=args.dataset,
             data_dir=args.data_dir,
             dataset_split="train",
             transform_split="train",
             percent=args.percent,
             use_preprocess=data2preprocess[args.dataset],
-            include_generated=True,
             preproc_dir=args.preproc_dir,
-            mixup=args.mixup,
-            half_generated=args.half_generated,
-            only_no_tags=args.only_no_tags,
-            no_tags_gene=args.no_tags_gene,
-            only_no_tags_balanced = args.only_no_tags_balanced
+            origin_only = False
         )
         self.valid_dataset = get_dataset(
+            args=args,
             dataset=args.dataset,
             data_dir=args.data_dir,
             dataset_split="valid",
             transform_split="valid",
             percent=args.percent,
             use_preprocess=data2preprocess[args.dataset],
+            origin_only = True
         )
         self.test_dataset = get_dataset(
+            args=args,
             dataset=args.dataset,
             data_dir=args.data_dir,
             dataset_split="test",
             transform_split="valid",
             percent=args.percent,
             use_preprocess=data2preprocess[args.dataset],
+            origin_only = False
         )
 
-        if args.mixup:
-            self.mixup_module = MixupModule(dataset=self.train_dataset, num_class=data2num_class[args.dataset])
+        # if args.mixup:
+        #     self.mixup_module = MixupModule(dataset=self.train_dataset, num_class=data2num_class[args.dataset])
 
         train_target_attr = []
         for data in self.train_dataset.data:
@@ -827,8 +827,8 @@ class LearnerOurs(object):
             self.sample_loss_ema_d.update(loss_d, index)
 
             # class-wise normalize
-            loss_b = self.sample_loss_ema_b.parameter[index].clone().detach()
-            loss_d = self.sample_loss_ema_d.parameter[index].clone().detach()
+            loss_b = self.sample_loss_ema_b.parameter[index.cpu()].clone().detach()
+            loss_d = self.sample_loss_ema_d.parameter[index.cpu()].clone().detach()
 
             if np.isnan(loss_b.mean().item()):
                 raise NameError('loss_b_ema')

@@ -3,18 +3,19 @@
 import torch
 
 class EMA:
-    def __init__(self, label, num_classes=None, alpha=0.9, device='cuda'):
-        self.label = label.to(device)
+    def __init__(self, label, num_classes=None, alpha=0.9, device=None):
+        self.label = label.cpu()
         self.alpha = alpha
         self.parameter = torch.zeros(label.size(0))
         self.updated = torch.zeros(label.size(0))
         self.num_classes = num_classes
-        self.max = torch.zeros(self.num_classes).to(device)
+        self.max = torch.zeros(self.num_classes).cpu()
 
     def update(self, data, index, curve=None, iter_range=None, step=None):
-        self.parameter = self.parameter.to(data.device)
-        self.updated = self.updated.to(data.device)
-        index = index.to(data.device)
+        data = data.cpu()
+        self.parameter = self.parameter.cpu()
+        self.updated = self.updated.cpu()
+        index = index.cpu()
 
         if curve is None:
             self.parameter[index] = self.alpha * self.parameter[index] + (1 - self.alpha * self.updated[index]) * data

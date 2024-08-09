@@ -196,6 +196,7 @@ class CMNISTDataset(Dataset):
                  args,
                  root, 
                  split,
+                 origin_only,
                  transform=None, 
                  image_path_list=None,
                  preproc_root=None,
@@ -208,7 +209,7 @@ class CMNISTDataset(Dataset):
         self.preproc_root = preproc_root
         self.mixup = args.mixup
         
-        if split == 'train' and args.ours:
+        if split == 'train' and args.ours and not origin_only:
             self.img2attr = {}
             original_class_bias_stats_path = os.path.join(preproc_root, 'original_class_bias_stats.json')
             self.original_class_bias_stats = load_json(original_class_bias_stats_path)
@@ -236,68 +237,69 @@ class CMNISTDataset(Dataset):
             self.conflict = glob(os.path.join(root, 'conflict', '*', '*'))
             self.data = self.align + self.conflict
     
-            if args.half_generated:
-                # return origin + generated(matched 1:1) -> generated ratio ~= biased ratio
-                self.generated_data = []
-                for data in self.data:
-                    image_key = data.replace(root+'/', '')
-                    if not self.origin2gene[image_key]: continue
-                    tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
-                    self.generated_data.append(tmp_gene_data)
-                self.data += self.generated_data
-
-            elif args.only_no_tags:
-                # return only non-bias-tag samples
-                self.no_tags = []
-                for data in self.data:
-                    image_key = data.replace(root+'/', '')
-                    if not self.origin2gene[image_key]:
-                        self.no_tags.append(data)
-                self.data = self.no_tags
-
-            elif args.only_tags:
-                # retrun only bias-tag samples(origin)
-                self.yes_tags = []
-                for data in self.data:
-                    image_key = data.replace(root+'/', '')
-                    if self.origin2gene[image_key]:
-                        self.yes_tags.append(data)
-                self.data = self.yes_tags
-
-            elif args.only_no_tags_balanced:
-                # return non-bias-tags sample + generated sample(# non-bias-tags * # classes)
-                self.no_tags = []
-                self.generated_data = []
-                self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
-                self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
-                self.tmp_generated_data = self.generated_align + self.generated_conflict
-                for data in self.data:
-                    image_key = data.replace(root+'/', '')
-                    if not self.origin2gene[image_key]:
-                        self.no_tags.append(data)
-                for _ in range(len(self.no_tags) * 10): # num_class 10
-                    choosen_gene_data = random.choice(self.tmp_generated_data)
-                    self.generated_data.append(choosen_gene_data)
-                self.data = self.no_tags + self.generated_data
-
-            elif args.no_tags_gene:
-                # return non-bias-tags sample + generated sample(# bias-tags)
-                self.no_tags = []
-                self.generated_data = []
-                for data in self.data:
-                    image_key = data.replace(root+'/', '')
-                    if not self.origin2gene[image_key]:
-                        self.no_tags.append(data)
-                    else:
+            if not origin_only:
+                if args.half_generated:
+                    # return origin + generated(matched 1:1) -> generated ratio ~= biased ratio
+                    self.generated_data = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]: continue
                         tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
                         self.generated_data.append(tmp_gene_data)
-                self.data = self.no_tags + self.generated_data
+                    self.data += self.generated_data
 
-            elif not args.half_generated and args.include_generated:
-                self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
-                self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
-                self.generated_data = self.generated_align + self.generated_conflict
-                self.data += self.generated_data
+                elif args.only_no_tags:
+                    # return only non-bias-tag samples
+                    self.no_tags = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                    self.data = self.no_tags
+
+                elif args.only_tags:
+                    # retrun only bias-tag samples(origin)
+                    self.yes_tags = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if self.origin2gene[image_key]:
+                            self.yes_tags.append(data)
+                    self.data = self.yes_tags
+
+                elif args.only_no_tags_balanced:
+                    # return non-bias-tags sample + generated sample(# non-bias-tags * # classes)
+                    self.no_tags = []
+                    self.generated_data = []
+                    self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                    self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                    self.tmp_generated_data = self.generated_align + self.generated_conflict
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                    for _ in range(len(self.no_tags) * 10): # num_class 10
+                        choosen_gene_data = random.choice(self.tmp_generated_data)
+                        self.generated_data.append(choosen_gene_data)
+                    self.data = self.no_tags + self.generated_data
+
+                elif args.no_tags_gene:
+                    # return non-bias-tags sample + generated sample(# bias-tags)
+                    self.no_tags = []
+                    self.generated_data = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                        else:
+                            tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
+                            self.generated_data.append(tmp_gene_data)
+                    self.data = self.no_tags + self.generated_data
+
+                elif not args.half_generated and args.include_generated:
+                    self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                    self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                    self.generated_data = self.generated_align + self.generated_conflict
+                    self.data += self.generated_data
             
         elif split=='valid':
             self.data = glob(os.path.join(root, split, '*'))
@@ -320,28 +322,111 @@ class bFFHQDataset(Dataset):
     def __init__(self,
                  args,
                  root, 
-                 split, 
+                 split,
+                 origin_only,
                  transform=None, 
-                 image_path_list=None, 
-                 include_generated=False, 
+                 image_path_list=None,
                  preproc_root=None,
-                 mixup=False):
+                 ):
         super(bFFHQDataset, self).__init__()
         self.transform = transform
         self.root = root
         self.image2pseudo = {}
         self.image_path_list = image_path_list
         self.preproc_root = preproc_root
-
+        self.mixup = args.mixup
+        
+        if split == 'train' and args.ours and not origin_only:
+            self.img2attr = {}
+            original_class_bias_stats_path = os.path.join(preproc_root, 'original_class_bias_stats.json')
+            self.original_class_bias_stats = load_json(original_class_bias_stats_path)
+            
+            generated_class_bias_stats_path = os.path.join(preproc_root, 'generated_class_bias_stats.json')
+            self.generated_class_bias_stats = load_json(generated_class_bias_stats_path) # generated_class_bias_stats[class][bias_attr]
+            
+            itg_tag_stats_path = os.path.join(preproc_root, 'tag_stats.json')
+            self.itg_tag_stats = load_json(itg_tag_stats_path)
+            
+            origin2gene_path = os.path.join(preproc_root, 'origin2gene.json')
+            self.origin2gene = load_json(origin2gene_path)
+            
+            self.class_biases = [self.itg_tag_stats[str(class_idx)]['bias_tags'] for class_idx in range(2)]
+            self.class_biases.append('none')
+            self.class_biases = list(set([bias for sublist in self.class_biases for bias in sublist]))
+            
+            for class_idx in self.original_class_bias_stats:
+                for bias_attr in self.original_class_bias_stats[class_idx]:
+                    for sample_path in self.original_class_bias_stats[class_idx][bias_attr]:
+                        self.img2attr[sample_path] = bias_attr
+                        
         if split=='train':
             self.align = glob(os.path.join(root, 'align', '*', '*'))
             self.conflict = glob(os.path.join(root, 'conflict', '*', '*'))
             self.data = self.align + self.conflict
-            if include_generated:
-                generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
-                generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
-                self.data += generated_align
-                self.data += generated_conflict
+            
+            if not origin_only:
+                if args.half_generated:
+                    # return origin + generated(matched 1:1) -> generated ratio ~= biased ratio
+                    self.generated_data = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]: continue
+                        tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
+                        self.generated_data.append(tmp_gene_data)
+                    self.data += self.generated_data
+
+                elif args.only_no_tags:
+                    # return only non-bias-tag samples
+                    self.no_tags = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                    self.data = self.no_tags
+
+                elif args.only_tags:
+                    # retrun only bias-tag samples(origin)
+                    self.yes_tags = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if self.origin2gene[image_key]:
+                            self.yes_tags.append(data)
+                    self.data = self.yes_tags
+
+                elif args.only_no_tags_balanced:
+                    # return non-bias-tags sample + generated sample(# non-bias-tags * # classes)
+                    self.no_tags = []
+                    self.generated_data = []
+                    self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                    self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                    self.tmp_generated_data = self.generated_align + self.generated_conflict
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                    for _ in range(len(self.no_tags) * 2): # num_class 2
+                        choosen_gene_data = random.choice(self.tmp_generated_data)
+                        self.generated_data.append(choosen_gene_data)
+                    self.data = self.no_tags + self.generated_data
+
+                elif args.no_tags_gene:
+                    # return non-bias-tags sample + generated sample(# bias-tags)
+                    self.no_tags = []
+                    self.generated_data = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                        else:
+                            tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
+                            self.generated_data.append(tmp_gene_data)
+                    self.data = self.no_tags + self.generated_data
+
+                elif not args.half_generated and args.include_generated:
+                    self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                    self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                    self.generated_data = self.generated_align + self.generated_conflict
+                    self.data += self.generated_data
 
         elif split=='valid':
             self.data = glob(os.path.join(os.path.dirname(root), split, '*'))
@@ -368,32 +453,116 @@ class bFFHQDataset(Dataset):
         
         return image, attr, self.data[index]
 
-
 class BARDataset(Dataset):
     def __init__(self,
+                 args,
                  root, 
-                 split, 
+                 split,
+                 origin_only,
                  transform=None, 
-                 image_path_list=None, 
-                 include_generated=False, 
+                 image_path_list=None,
                  preproc_root=None,
-                 mixup=False):
+                 ):
         super(BARDataset, self).__init__()
         self.transform = transform
         self.root = root
         self.image2pseudo = {}
         self.image_path_list = image_path_list
         self.preproc_root = preproc_root
+        self.mixup = args.mixup
+        
+        if split == 'train' and args.ours and not origin_only:
+            self.img2attr = {}
+            original_class_bias_stats_path = os.path.join(preproc_root, 'original_class_bias_stats.json')
+            self.original_class_bias_stats = load_json(original_class_bias_stats_path)
+            
+            generated_class_bias_stats_path = os.path.join(preproc_root, 'generated_class_bias_stats.json')
+            self.generated_class_bias_stats = load_json(generated_class_bias_stats_path) # generated_class_bias_stats[class][bias_attr]
+            
+            itg_tag_stats_path = os.path.join(preproc_root, 'tag_stats.json')
+            self.itg_tag_stats = load_json(itg_tag_stats_path)
+            
+            origin2gene_path = os.path.join(preproc_root, 'origin2gene.json')
+            self.origin2gene = load_json(origin2gene_path)
+            
+            self.class_biases = [self.itg_tag_stats[str(class_idx)]['bias_tags'] for class_idx in range(6)]
+            self.class_biases.append('none')
+            self.class_biases = list(set([bias for sublist in self.class_biases for bias in sublist]))
+            
+            for class_idx in self.original_class_bias_stats:
+                for bias_attr in self.original_class_bias_stats[class_idx]:
+                    for sample_path in self.original_class_bias_stats[class_idx][bias_attr]:
+                        self.img2attr[sample_path] = bias_attr
 
         if split=='train':
             self.align = glob(os.path.join(root, 'align', '*', '*'))
             self.conflict = glob(os.path.join(root, 'conflict', '*', '*'))
             self.data = self.align + self.conflict
-            if include_generated:
-                generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
-                generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
-                self.data += generated_align
-                self.data += generated_conflict
+            
+            if not origin_only:
+                if args.half_generated:
+                    # return origin + generated(matched 1:1) -> generated ratio ~= biased ratio
+                    self.generated_data = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]: continue
+                        tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
+                        self.generated_data.append(tmp_gene_data)
+                    self.data += self.generated_data
+
+                elif args.only_no_tags:
+                    # return only non-bias-tag samples
+                    self.no_tags = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                    self.data = self.no_tags
+
+                elif args.only_tags:
+                    # retrun only bias-tag samples(origin)
+                    self.yes_tags = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if self.origin2gene[image_key]:
+                            self.yes_tags.append(data)
+                    self.data = self.yes_tags
+
+                elif args.only_no_tags_balanced:
+                    # return non-bias-tags sample + generated sample(# non-bias-tags * # classes)
+                    self.no_tags = []
+                    self.generated_data = []
+                    self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                    self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                    self.tmp_generated_data = self.generated_align + self.generated_conflict
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                    for _ in range(len(self.no_tags) * 6): # num_class 6
+                        choosen_gene_data = random.choice(self.tmp_generated_data)
+                        self.generated_data.append(choosen_gene_data)
+                    self.data = self.no_tags + self.generated_data
+
+                elif args.no_tags_gene:
+                    # return non-bias-tags sample + generated sample(# bias-tags)
+                    self.no_tags = []
+                    self.generated_data = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                        else:
+                            tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
+                            self.generated_data.append(tmp_gene_data)
+                    self.data = self.no_tags + self.generated_data
+
+                elif not args.half_generated and args.include_generated:
+                    self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                    self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                    self.generated_data = self.generated_align + self.generated_conflict
+                    self.data += self.generated_data
+                
         elif split=='valid':
             self.data = glob(os.path.join(root, '../valid', '*', '*'))
         elif split=='test':
@@ -417,33 +586,116 @@ class BARDataset(Dataset):
             image = self.transform(image)
         
         return image, attr, self.data[index]
-    
-    
+       
 class DogCatDataset(Dataset):
     def __init__(self,
+                 args,
                  root, 
-                 split, 
+                 split,
+                 origin_only,
                  transform=None, 
-                 image_path_list=None, 
-                 include_generated=False, 
+                 image_path_list=None,
                  preproc_root=None,
-                 mixup=False):
+                 ):
         super(DogCatDataset, self).__init__()
         self.transform = transform
         self.root = root
         self.image2pseudo = {}
         self.image_path_list = image_path_list
         self.preproc_root = preproc_root
+        self.mixup = args.mixup
+        
+        if split == 'train' and args.ours and not origin_only:
+            self.img2attr = {}
+            original_class_bias_stats_path = os.path.join(preproc_root, 'original_class_bias_stats.json')
+            self.original_class_bias_stats = load_json(original_class_bias_stats_path)
+            
+            generated_class_bias_stats_path = os.path.join(preproc_root, 'generated_class_bias_stats.json')
+            self.generated_class_bias_stats = load_json(generated_class_bias_stats_path) # generated_class_bias_stats[class][bias_attr]
+            
+            itg_tag_stats_path = os.path.join(preproc_root, 'tag_stats.json')
+            self.itg_tag_stats = load_json(itg_tag_stats_path)
+            
+            origin2gene_path = os.path.join(preproc_root, 'origin2gene.json')
+            self.origin2gene = load_json(origin2gene_path)
+            
+            self.class_biases = [self.itg_tag_stats[str(class_idx)]['bias_tags'] for class_idx in range(2)]
+            self.class_biases.append('none')
+            self.class_biases = list(set([bias for sublist in self.class_biases for bias in sublist]))
+            
+            for class_idx in self.original_class_bias_stats:
+                for bias_attr in self.original_class_bias_stats[class_idx]:
+                    for sample_path in self.original_class_bias_stats[class_idx][bias_attr]:
+                        self.img2attr[sample_path] = bias_attr
 
         if split=='train':
             self.align = glob(os.path.join(root, 'align', '*', '*'))
             self.conflict = glob(os.path.join(root, 'conflict', '*', '*'))
             self.data = self.align + self.conflict
-            if include_generated:
-                generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
-                generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
-                self.data += generated_align
-                self.data += generated_conflict
+            if not origin_only:
+                if args.half_generated:
+                    # return origin + generated(matched 1:1) -> generated ratio ~= biased ratio
+                    self.generated_data = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]: continue
+                        tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
+                        self.generated_data.append(tmp_gene_data)
+                    self.data += self.generated_data
+
+                elif args.only_no_tags:
+                    # return only non-bias-tag samples
+                    self.no_tags = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                    self.data = self.no_tags
+
+                elif args.only_tags:
+                    # retrun only bias-tag samples(origin)
+                    self.yes_tags = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if self.origin2gene[image_key]:
+                            self.yes_tags.append(data)
+                    self.data = self.yes_tags
+
+                elif args.only_no_tags_balanced:
+                    # return non-bias-tags sample + generated sample(# non-bias-tags * # classes)
+                    self.no_tags = []
+                    self.generated_data = []
+                    self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                    self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                    self.tmp_generated_data = self.generated_align + self.generated_conflict
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                    for _ in range(len(self.no_tags) * 2): # num_class 2
+                        choosen_gene_data = random.choice(self.tmp_generated_data)
+                        self.generated_data.append(choosen_gene_data)
+                    self.data = self.no_tags + self.generated_data
+
+                elif args.no_tags_gene:
+                    # return non-bias-tags sample + generated sample(# bias-tags)
+                    self.no_tags = []
+                    self.generated_data = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                        else:
+                            tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
+                            self.generated_data.append(tmp_gene_data)
+                    self.data = self.no_tags + self.generated_data
+
+                elif not args.half_generated and args.include_generated:
+                    self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                    self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                    self.generated_data = self.generated_align + self.generated_conflict
+                    self.data += self.generated_data
+                
         elif split == "valid":
             self.data = glob(os.path.join(root, split, '*'))
         elif split == "test":
@@ -461,32 +713,116 @@ class DogCatDataset(Dataset):
 
         return image, attr, self.data[index]
 
-
 class CIFAR10CDataset(Dataset):
     def __init__(self,
+                 args,
                  root, 
-                 split, 
+                 split,
+                 origin_only,
                  transform=None, 
-                 image_path_list=None, 
-                 include_generated=False, 
+                 image_path_list=None,
                  preproc_root=None,
-                 mixup=False):
+                 ):
         super(CIFAR10CDataset, self).__init__()
         self.transform = transform
         self.root = root
         self.image2pseudo = {}
         self.image_path_list = image_path_list
         self.preproc_root = preproc_root
+        self.mixup = args.mixup
+        
+        if split == 'train' and args.ours and not origin_only:
+            self.img2attr = {}
+            original_class_bias_stats_path = os.path.join(preproc_root, 'original_class_bias_stats.json')
+            self.original_class_bias_stats = load_json(original_class_bias_stats_path)
+            
+            generated_class_bias_stats_path = os.path.join(preproc_root, 'generated_class_bias_stats.json')
+            self.generated_class_bias_stats = load_json(generated_class_bias_stats_path) # generated_class_bias_stats[class][bias_attr]
+            
+            itg_tag_stats_path = os.path.join(preproc_root, 'tag_stats.json')
+            self.itg_tag_stats = load_json(itg_tag_stats_path)
+            
+            origin2gene_path = os.path.join(preproc_root, 'origin2gene.json')
+            self.origin2gene = load_json(origin2gene_path)
+            
+            self.class_biases = [self.itg_tag_stats[str(class_idx)]['bias_tags'] for class_idx in range(10)]
+            self.class_biases.append('none')
+            self.class_biases = list(set([bias for sublist in self.class_biases for bias in sublist]))
+            
+            for class_idx in self.original_class_bias_stats:
+                for bias_attr in self.original_class_bias_stats[class_idx]:
+                    for sample_path in self.original_class_bias_stats[class_idx][bias_attr]:
+                        self.img2attr[sample_path] = bias_attr
 
         if split=='train':
             self.align = glob(os.path.join(root, 'align', '*', '*'))
             self.conflict = glob(os.path.join(root, 'conflict', '*', '*'))
             self.data = self.align + self.conflict
-            if include_generated:
-                generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
-                generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
-                self.data += generated_align
-                self.data += generated_conflict
+            
+            if not origin_only:
+                if args.half_generated:
+                    # return origin + generated(matched 1:1) -> generated ratio ~= biased ratio
+                    self.generated_data = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]: continue
+                        tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
+                        self.generated_data.append(tmp_gene_data)
+                    self.data += self.generated_data
+
+                elif args.only_no_tags:
+                    # return only non-bias-tag samples
+                    self.no_tags = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                    self.data = self.no_tags
+
+                elif args.only_tags:
+                    # retrun only bias-tag samples(origin)
+                    self.yes_tags = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if self.origin2gene[image_key]:
+                            self.yes_tags.append(data)
+                    self.data = self.yes_tags
+
+                elif args.only_no_tags_balanced:
+                    # return non-bias-tags sample + generated sample(# non-bias-tags * # classes)
+                    self.no_tags = []
+                    self.generated_data = []
+                    self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                    self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                    self.tmp_generated_data = self.generated_align + self.generated_conflict
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                    for _ in range(len(self.no_tags) * 10): # num_class 10
+                        choosen_gene_data = random.choice(self.tmp_generated_data)
+                        self.generated_data.append(choosen_gene_data)
+                    self.data = self.no_tags + self.generated_data
+
+                elif args.no_tags_gene:
+                    # return non-bias-tags sample + generated sample(# bias-tags)
+                    self.no_tags = []
+                    self.generated_data = []
+                    for data in self.data:
+                        image_key = data.replace(root+'/', '')
+                        if not self.origin2gene[image_key]:
+                            self.no_tags.append(data)
+                        else:
+                            tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
+                            self.generated_data.append(tmp_gene_data)
+                    self.data = self.no_tags + self.generated_data
+
+                elif not args.half_generated and args.include_generated:
+                    self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                    self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                    self.generated_data = self.generated_align + self.generated_conflict
+                    self.data += self.generated_data
+                
         elif split=='valid':
             self.data = glob(os.path.join(root, split, '*', '*'))
         elif split=='test':
@@ -621,6 +957,7 @@ def get_dataset(args,
                 dataset_split, 
                 transform_split, 
                 percent,
+                origin_only,
                 use_preprocess=None, 
                 image_path_list=None,
                 preproc_dir='none'):
@@ -638,8 +975,9 @@ def get_dataset(args,
         preproc_root = preproc_dir + f"/cmnist/{percent}"
         dataset = CMNISTDataset(args=args,
                                 root=root, 
-                                split=dataset_split, 
-                                transform=transform, 
+                                split=dataset_split,
+                                origin_only=origin_only,
+                                transform=transform,
                                 image_path_list=image_path_list,
                                 preproc_root=preproc_root)
         
@@ -647,8 +985,9 @@ def get_dataset(args,
         root = data_dir + f"/bffhq/{percent}"
         preproc_root = preproc_dir + f"/bffhq/{percent}"
         dataset = bFFHQDataset(args=args,
-                               root=root,
+                               root=root, 
                                split=dataset_split, 
+                               origin_only=origin_only,
                                transform=transform, 
                                image_path_list=image_path_list,
                                preproc_root=preproc_root)
@@ -659,29 +998,32 @@ def get_dataset(args,
         dataset = BARDataset(args=args,
                              root=root, 
                              split=dataset_split, 
+                             origin_only=origin_only,
                              transform=transform, 
                              image_path_list=image_path_list,
                              preproc_root=preproc_root)
         
-    # elif dataset == "dogs_and_cats":
-    #     root = data_dir + f"/dogs_and_cats/{percent}"
-    #     preproc_root = preproc_dir + f"/dogs_and_cats/{percent}"
-    #     dataset = DogCatDataset(root=root, split=dataset_split, 
-    #                             transform=transform, 
-    #                             image_path_list=image_path_list, 
-    #                             include_generated=include_generated, 
-    #                             preproc_root=preproc_root,
-    #                             mixup=mixup)
+    elif dataset == "dogs_and_cats":
+        root = data_dir + f"/dogs_and_cats/{percent}"
+        preproc_root = preproc_dir + f"/dogs_and_cats/{percent}"
+        dataset = DogCatDataset(args=args,
+                                root=root, 
+                                split=dataset_split, 
+                                origin_only=origin_only,
+                                transform=transform, 
+                                image_path_list=image_path_list,
+                                preproc_root=preproc_root)
         
-    # elif dataset == "cifar10c":
-    #     root = data_dir + f"/cifar10c/{percent}"
-    #     preproc_root = preproc_dir + f"/cifar10c/{percent}"
-    #     dataset = CIFAR10CDataset(root=root, split=dataset_split, 
-    #                               transform=transform, 
-    #                               image_path_list=image_path_list, 
-    #                               include_generated=include_generated, 
-    #                               preproc_root=preproc_root,
-    #                               mixup=mixup)
+    elif dataset == "cifar10c":
+        root = data_dir + f"/cifar10c/{percent}"
+        preproc_root = preproc_dir + f"/cifar10c/{percent}"
+        dataset = CIFAR10CDataset(args=args,
+                                  root=root, 
+                                  split=dataset_split, 
+                                  origin_only=origin_only,
+                                  transform=transform, 
+                                  image_path_list=image_path_list,
+                                  preproc_root=preproc_root)
     else:
         print('wrong dataset ...')
         import sys
