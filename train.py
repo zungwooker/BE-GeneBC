@@ -1,7 +1,8 @@
 import numpy as np
 import torch
 import random
-from learner import Learner
+from learner_ours import LearnerOurs
+from learner_base import LearnerBase
 import argparse
 from email.mime.text import MIMEText
 import smtplib
@@ -11,15 +12,11 @@ def email(content: str):
     msg['Subject'] = 'Preprocess Done.'
     msg['From'] = 'zungwooker@gmail.com'
     msg['To'] = 'zungwooker@hanyang.ac.kr'
-
     server = smtplib.SMTP('smtp.gmail.com', 587)
     server.starttls()
     server.login('zungwooker@gmail.com', 'rajm ucuz xyhp vbzf')
-
     server.sendmail('zungwooker@gmail.com', 'zungwooker@hanyang.ac.kr', msg.as_string())
-
     return
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='AAAI-2023-BiasEnsemble')
@@ -53,6 +50,11 @@ if __name__ == '__main__':
     parser.add_argument("--tensorboard_dir", help="tensorboard directory", default= 'summary', type=str)
     parser.add_argument("--lr_decay", action="store_true")
     parser.add_argument("--mixup", action="store_true")
+    parser.add_argument("--half_generated", action="store_true")
+    parser.add_argument("--only_no_tags", action="store_true")
+    parser.add_argument("--only_tags", action="store_true")
+    parser.add_argument("--no_tags_gene", action="store_true")
+    parser.add_argument("--only_no_tags_balanced", action="store_true")
 
     # logging
     parser.add_argument("--log_dir", help='path for saving model', default='./log', type=str)
@@ -62,15 +64,11 @@ if __name__ == '__main__':
     parser.add_argument("--tensorboard", action="store_true", help="whether to use tensorboard")
 
     # experiment
-    parser.add_argument("--train_vanilla", action="store_true", help="whether to train vanilla")
-    parser.add_argument("--train_vanilla_ours", action="store_true", help="whether to train vanilla + ours")
-    parser.add_argument("--train_lff_be_ours", action="store_true", help="whether to train BE + LfF + ours")
-    parser.add_argument("--train_lff_be_ours_all", action="store_true", help="whether to train BE + LfF + ours")
-    parser.add_argument("--train_lff_ours_mixup", action="store_true", help="whether to train BE + LfF + ours")
-    parser.add_argument("--train_lff_ours", action="store_true", help="whether to train LfF + ours")
-    parser.add_argument("--train_lff_ours_all", action="store_true", help="whether to train LfF + ours")
-    parser.add_argument("--train_disent_be_ours", action="store_true", help="whether to train BE + DisEnt + ours")
-    parser.add_argument("--train_disent_ours", action="store_true", help="whether to train DisEnt + ours")
+    parser.add_argument("--ours", action="store_true", help="whether to train vanilla")
+    parser.add_argument("--base", action="store_true", help="whether to train vanilla")
+    parser.add_argument("--train_vanilla", action="store_true")
+    parser.add_argument("--train_lff", action="store_true")
+    parser.add_argument("--train_lff_be", action="store_true")
 
     parser.add_argument("--fix_randomseed", action="store_true", help="fix randomseed")
     parser.add_argument("--seed",  help="seed", type=int, default=42)
@@ -101,7 +99,13 @@ if __name__ == '__main__':
         random.seed(random_seed)
 
     # init learner
-    learner = Learner(args)
+    if args.ours:
+        learner = LearnerOurs(args)
+    elif args.base:
+        learner = LearnerBase(args)
+    else:
+        print("Choose one learner..")
+        raise NotImplementedError
     
     # actual training
     print('Training starts ...')
@@ -109,23 +113,13 @@ if __name__ == '__main__':
     learner.wandb_switch('start')
 
     if args.train_vanilla:
-        learner.train_vanilla(args, origin_only=True)
-    elif args.train_vanilla_ours:
-        learner.train_vanilla(args, origin_only=False)
-    elif args.train_lff_be_ours:
-        learner.train_lff_be_ours(args)
-    elif args.train_lff_be_ours_all:
-        learner.train_lff_be_ours_all(args)
-    elif args.train_lff_ours:
-        learner.train_lff_ours(args)
-    elif args.train_lff_ours_mixup:
-        learner.train_lff_ours_mixup(args)
-    elif args.train_lff_ours_all:
-        learner.train_lff_ours_all(args)
-    elif args.train_disent_be_ours:
-        learner.train_disent_be_ours(args)
-    elif args.train_disent_ours:
-        learner.train_disent_ours(args)
+        breakpoint()
+        learner.train_vanilla(args=args)
+    elif args.train_lff:
+        breakpoint()
+        learner.train_lff(args=args)
+    elif args.train_lff_be:
+        learner.train_lff_be(args=args)
     else:
         print('choose one of the two options ...')
         import sys

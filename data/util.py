@@ -199,7 +199,12 @@ class CMNISTDataset(Dataset):
                  image_path_list=None, 
                  include_generated=False, 
                  preproc_root=None,
-                 mixup=False):
+                 mixup=False,
+                 half_generated=False,
+                 only_no_tags=False,
+                 only_tags=False,
+                 no_tags_gene=False,
+                 only_no_tags_balanced=False):
         super(CMNISTDataset, self).__init__()
         self.transform = transform
         self.root = root
@@ -208,7 +213,7 @@ class CMNISTDataset(Dataset):
         self.preproc_root = preproc_root
         self.mixup = mixup
         
-        if self.mixup:
+        if split == 'train':
             self.img2attr = {}
             original_class_bias_stats_path = os.path.join(preproc_root, 'original_class_bias_stats.json')
             self.original_class_bias_stats = load_json(original_class_bias_stats_path)
@@ -235,11 +240,65 @@ class CMNISTDataset(Dataset):
             self.align = glob(os.path.join(root, 'align', '*', '*'))
             self.conflict = glob(os.path.join(root, 'conflict', '*', '*'))
             self.data = self.align + self.conflict
-            if include_generated:
-                generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
-                generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
-                self.data += generated_align
-                self.data += generated_conflict
+    
+            if half_generated:
+                self.generated_data = []
+                for data in self.data:
+                    image_key = data.replace(root+'/', '')
+                    if not self.origin2gene[image_key]: continue
+                    tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
+                    self.generated_data.append(tmp_gene_data)
+                self.data += self.generated_data
+
+            elif only_no_tags:
+                self.no_tags = []
+                for data in self.data:
+                    image_key = data.replace(root+'/', '')
+                    if not self.origin2gene[image_key]:
+                        self.no_tags.append(data)
+                self.data = self.no_tags
+
+            elif only_tags:
+                self.yes_tags = []
+                for data in self.data:
+                    image_key = data.replace(root+'/', '')
+                    if self.origin2gene[image_key]:
+                        self.yes_tags.append(data)
+                self.data = self.yes_tags
+
+            elif only_no_tags_balanced:
+                self.no_tags = []
+                self.generated_data = []
+                self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                self.tmp_generated_data = self.generated_align + self.generated_conflict
+                for data in self.data:
+                    image_key = data.replace(root+'/', '')
+                    if not self.origin2gene[image_key]:
+                        self.no_tags.append(data)
+                for _ in range(len(self.no_tags) * 10): # num_class 10
+                    choosen_gene_data = random.choice(self.tmp_generated_data)
+                    self.generated_data.append(choosen_gene_data)
+                self.data = self.no_tags + self.generated_data
+
+            elif no_tags_gene:
+                self.no_tags = []
+                self.generated_data = []
+                for data in self.data:
+                    image_key = data.replace(root+'/', '')
+                    if not self.origin2gene[image_key]:
+                        self.no_tags.append(data)
+                    else:
+                        tmp_gene_data = os.path.join(preproc_root, random.choice(self.origin2gene[image_key]))
+                        self.generated_data.append(tmp_gene_data)
+                self.data = self.no_tags + self.generated_data
+
+            elif not half_generated and include_generated:
+                self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
+                self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
+                self.generated_data = self.generated_align + self.generated_conflict
+                self.data += self.generated_data
+            
         elif split=='valid':
             self.data = glob(os.path.join(root, split, '*'))
         elif split=='test':
@@ -564,7 +623,12 @@ def get_dataset(dataset,
                 image_path_list=None, 
                 include_generated=False, 
                 preproc_dir='none',
-                mixup=False):
+                mixup=False,
+                half_generated=False,
+                only_no_tags=False,
+                only_tags=False,
+                no_tags_gene=False,
+                only_no_tags_balanced=False):
 
     dataset_category = dataset.split("-")[0]
     if use_preprocess:
@@ -582,7 +646,12 @@ def get_dataset(dataset,
                                 image_path_list=image_path_list, 
                                 include_generated=include_generated, 
                                 preproc_root=preproc_root,
-                                mixup=mixup)
+                                mixup=mixup,
+                                half_generated=half_generated,
+                                only_no_tags=only_no_tags,
+                                only_tags=only_tags,
+                                no_tags_gene=no_tags_gene,
+                                only_no_tags_balanced=only_no_tags_balanced)
         
     elif dataset == "bffhq":
         root = data_dir + f"/bffhq/{percent}"

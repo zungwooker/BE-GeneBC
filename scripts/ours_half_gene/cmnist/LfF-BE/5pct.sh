@@ -1,0 +1,33 @@
+python train.py \
+    --ours \
+    --half_generated \
+    --train_lff_be \
+    --dataset=cmnist \
+    --percent=5pct \
+    --lr=0.01 \
+    --data_dir '/home/zungwooker/Debiasing/benchmarks' \
+    --preproc_dir '/home/zungwooker/Debiasing/preproc' \
+    --projcode 'CMNIST 5pct' \
+    --run_name 'LfF-BE-ours-half-generated' \
+    --device 'cuda' \
+    --gpu_num 1 \
+    --fix_randomseed \
+    --seed 0 \
+    --wandb
+
+python train.py \
+    --ours \
+    --half_generated \
+    --train_lff_be \
+    --dataset=cmnist \
+    --percent=5pct \
+    --lr=0.01 \
+    --data_dir '/home/zungwooker/Debiasing/benchmarks' \
+    --preproc_dir '/home/zungwooker/Debiasing/preproc' \
+    --projcode 'CMNIST 5pct' \
+    --run_name 'LfF-BE-ours-half-generated' \
+    --device 'cuda' \
+    --gpu_num 1 \
+    --fix_randomseed \
+    --seed 42 \
+    --wandb
