@@ -193,27 +193,22 @@ class ZippedDataset(Dataset):
     
 class CMNISTDataset(Dataset):
     def __init__(self,
+                 args,
                  root, 
-                 split, 
+                 split,
                  transform=None, 
-                 image_path_list=None, 
-                 include_generated=False, 
+                 image_path_list=None,
                  preproc_root=None,
-                 mixup=False,
-                 half_generated=False,
-                 only_no_tags=False,
-                 only_tags=False,
-                 no_tags_gene=False,
-                 only_no_tags_balanced=False):
+                 ):
         super(CMNISTDataset, self).__init__()
         self.transform = transform
         self.root = root
         self.image2pseudo = {}
         self.image_path_list = image_path_list
         self.preproc_root = preproc_root
-        self.mixup = mixup
+        self.mixup = args.mixup
         
-        if split == 'train':
+        if split == 'train' and args.ours:
             self.img2attr = {}
             original_class_bias_stats_path = os.path.join(preproc_root, 'original_class_bias_stats.json')
             self.original_class_bias_stats = load_json(original_class_bias_stats_path)
@@ -241,7 +236,8 @@ class CMNISTDataset(Dataset):
             self.conflict = glob(os.path.join(root, 'conflict', '*', '*'))
             self.data = self.align + self.conflict
     
-            if half_generated:
+            if args.half_generated:
+                # return origin + generated(matched 1:1) -> generated ratio ~= biased ratio
                 self.generated_data = []
                 for data in self.data:
                     image_key = data.replace(root+'/', '')
@@ -250,7 +246,8 @@ class CMNISTDataset(Dataset):
                     self.generated_data.append(tmp_gene_data)
                 self.data += self.generated_data
 
-            elif only_no_tags:
+            elif args.only_no_tags:
+                # return only non-bias-tag samples
                 self.no_tags = []
                 for data in self.data:
                     image_key = data.replace(root+'/', '')
@@ -258,7 +255,8 @@ class CMNISTDataset(Dataset):
                         self.no_tags.append(data)
                 self.data = self.no_tags
 
-            elif only_tags:
+            elif args.only_tags:
+                # retrun only bias-tag samples(origin)
                 self.yes_tags = []
                 for data in self.data:
                     image_key = data.replace(root+'/', '')
@@ -266,7 +264,8 @@ class CMNISTDataset(Dataset):
                         self.yes_tags.append(data)
                 self.data = self.yes_tags
 
-            elif only_no_tags_balanced:
+            elif args.only_no_tags_balanced:
+                # return non-bias-tags sample + generated sample(# non-bias-tags * # classes)
                 self.no_tags = []
                 self.generated_data = []
                 self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
@@ -281,7 +280,8 @@ class CMNISTDataset(Dataset):
                     self.generated_data.append(choosen_gene_data)
                 self.data = self.no_tags + self.generated_data
 
-            elif no_tags_gene:
+            elif args.no_tags_gene:
+                # return non-bias-tags sample + generated sample(# bias-tags)
                 self.no_tags = []
                 self.generated_data = []
                 for data in self.data:
@@ -293,7 +293,7 @@ class CMNISTDataset(Dataset):
                         self.generated_data.append(tmp_gene_data)
                 self.data = self.no_tags + self.generated_data
 
-            elif not half_generated and include_generated:
+            elif not args.half_generated and args.include_generated:
                 self.generated_align = glob(os.path.join(preproc_root, 'align', '*', 'imgs', '*'))
                 self.generated_conflict = glob(os.path.join(preproc_root, 'conflict', '*', 'imgs', '*'))
                 self.generated_data = self.generated_align + self.generated_conflict
@@ -316,9 +316,9 @@ class CMNISTDataset(Dataset):
         
         return image, attr, self.data[index]
 
-
 class bFFHQDataset(Dataset):   
     def __init__(self,
+                 args,
                  root, 
                  split, 
                  transform=None, 
@@ -367,6 +367,7 @@ class bFFHQDataset(Dataset):
             image = self.transform(image)
         
         return image, attr, self.data[index]
+
 
 class BARDataset(Dataset):
     def __init__(self,
@@ -614,21 +615,15 @@ transforms_preprcs = {
         },
     }
 
-def get_dataset(dataset, 
+def get_dataset(args,
+                dataset, 
                 data_dir, 
                 dataset_split, 
                 transform_split, 
-                percent, 
+                percent,
                 use_preprocess=None, 
-                image_path_list=None, 
-                include_generated=False, 
-                preproc_dir='none',
-                mixup=False,
-                half_generated=False,
-                only_no_tags=False,
-                only_tags=False,
-                no_tags_gene=False,
-                only_no_tags_balanced=False):
+                image_path_list=None,
+                preproc_dir='none'):
 
     dataset_category = dataset.split("-")[0]
     if use_preprocess:
@@ -641,57 +636,52 @@ def get_dataset(dataset,
     if dataset == 'cmnist':
         root = data_dir + f"/cmnist/{percent}"
         preproc_root = preproc_dir + f"/cmnist/{percent}"
-        dataset = CMNISTDataset(root=root, split=dataset_split, 
+        dataset = CMNISTDataset(args=args,
+                                root=root, 
+                                split=dataset_split, 
                                 transform=transform, 
-                                image_path_list=image_path_list, 
-                                include_generated=include_generated, 
-                                preproc_root=preproc_root,
-                                mixup=mixup,
-                                half_generated=half_generated,
-                                only_no_tags=only_no_tags,
-                                only_tags=only_tags,
-                                no_tags_gene=no_tags_gene,
-                                only_no_tags_balanced=only_no_tags_balanced)
+                                image_path_list=image_path_list,
+                                preproc_root=preproc_root)
         
     elif dataset == "bffhq":
         root = data_dir + f"/bffhq/{percent}"
         preproc_root = preproc_dir + f"/bffhq/{percent}"
-        dataset = bFFHQDataset(root=root, split=dataset_split, 
+        dataset = bFFHQDataset(args=args,
+                               root=root,
+                               split=dataset_split, 
                                transform=transform, 
-                               image_path_list=image_path_list, 
-                               include_generated=include_generated, 
-                               preproc_root=preproc_root,
-                               mixup=mixup)
+                               image_path_list=image_path_list,
+                               preproc_root=preproc_root)
         
     elif dataset == "bar":
         root = data_dir + f"/bar/{percent}"
         preproc_root = preproc_dir + f"/bar/{percent}"
-        dataset = BARDataset(root=root, split=dataset_split, 
+        dataset = BARDataset(args=args,
+                             root=root, 
+                             split=dataset_split, 
                              transform=transform, 
-                             image_path_list=image_path_list, 
-                             include_generated=include_generated, 
-                             preproc_root=preproc_root,
-                             mixup=mixup)
+                             image_path_list=image_path_list,
+                             preproc_root=preproc_root)
         
-    elif dataset == "dogs_and_cats":
-        root = data_dir + f"/dogs_and_cats/{percent}"
-        preproc_root = preproc_dir + f"/dogs_and_cats/{percent}"
-        dataset = DogCatDataset(root=root, split=dataset_split, 
-                                transform=transform, 
-                                image_path_list=image_path_list, 
-                                include_generated=include_generated, 
-                                preproc_root=preproc_root,
-                                mixup=mixup)
+    # elif dataset == "dogs_and_cats":
+    #     root = data_dir + f"/dogs_and_cats/{percent}"
+    #     preproc_root = preproc_dir + f"/dogs_and_cats/{percent}"
+    #     dataset = DogCatDataset(root=root, split=dataset_split, 
+    #                             transform=transform, 
+    #                             image_path_list=image_path_list, 
+    #                             include_generated=include_generated, 
+    #                             preproc_root=preproc_root,
+    #                             mixup=mixup)
         
-    elif dataset == "cifar10c":
-        root = data_dir + f"/cifar10c/{percent}"
-        preproc_root = preproc_dir + f"/cifar10c/{percent}"
-        dataset = CIFAR10CDataset(root=root, split=dataset_split, 
-                                  transform=transform, 
-                                  image_path_list=image_path_list, 
-                                  include_generated=include_generated, 
-                                  preproc_root=preproc_root,
-                                  mixup=mixup)
+    # elif dataset == "cifar10c":
+    #     root = data_dir + f"/cifar10c/{percent}"
+    #     preproc_root = preproc_dir + f"/cifar10c/{percent}"
+    #     dataset = CIFAR10CDataset(root=root, split=dataset_split, 
+    #                               transform=transform, 
+    #                               image_path_list=image_path_list, 
+    #                               include_generated=include_generated, 
+    #                               preproc_root=preproc_root,
+    #                               mixup=mixup)
     else:
         print('wrong dataset ...')
         import sys

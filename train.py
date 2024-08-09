@@ -26,7 +26,7 @@ if __name__ == '__main__':
     parser.add_argument("--lr",help='learning rate',default=1e-3, type=float)
     parser.add_argument("--weight_decay",help='weight_decay',default=0.0, type=float)
     parser.add_argument("--momentum",help='momentum',default=0.9, type=float)
-    parser.add_argument("--num_workers", help="workers number", default=16, type=int)
+    parser.add_argument("--num_workers", help="workers number", default=4, type=int)
     parser.add_argument("--exp", help='experiment name', default='debugging', type=str)
     parser.add_argument("--device", help="cuda or cpu", default='cuda', type=str)
     parser.add_argument('--gpu_num', required=True, type=str, help="GPU index") # zungwooker added
@@ -55,6 +55,7 @@ if __name__ == '__main__':
     parser.add_argument("--only_tags", action="store_true")
     parser.add_argument("--no_tags_gene", action="store_true")
     parser.add_argument("--only_no_tags_balanced", action="store_true")
+    parser.add_argument("--include_generated", action="store_true")
 
     # logging
     parser.add_argument("--log_dir", help='path for saving model', default='./log', type=str)
@@ -69,6 +70,8 @@ if __name__ == '__main__':
     parser.add_argument("--train_vanilla", action="store_true")
     parser.add_argument("--train_lff", action="store_true")
     parser.add_argument("--train_lff_be", action="store_true")
+    parser.add_argument("--train_disent", action="store_true")
+    parser.add_argument("--train_disent_be", action="store_true")
 
     parser.add_argument("--fix_randomseed", action="store_true", help="fix randomseed")
     parser.add_argument("--seed",  help="seed", type=int, default=42)
@@ -113,10 +116,8 @@ if __name__ == '__main__':
     learner.wandb_switch('start')
 
     if args.train_vanilla:
-        breakpoint()
         learner.train_vanilla(args=args)
     elif args.train_lff:
-        breakpoint()
         learner.train_lff(args=args)
     elif args.train_lff_be:
         learner.train_lff_be(args=args)

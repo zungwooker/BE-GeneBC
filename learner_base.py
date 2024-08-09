@@ -6,7 +6,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import wandb
 
-
 import os
 import torch.optim as optim
 
@@ -53,7 +52,7 @@ class LearnerBase(object):
         print(f'model: {self.model} || dataset: {args.dataset}')
         print(f'working with experiment: {args.exp}...')
         self.log_dir = os.makedirs(os.path.join(args.log_dir, args.dataset, args.exp), exist_ok=True)
-        self.device = torch.device(args.device)
+        self.device = torch.device(''.join(['cuda:', args.gpu_num]) if args.device == 'cuda' else 'cpu')
         self.args = args
 
         print(self.args)
@@ -67,7 +66,8 @@ class LearnerBase(object):
         
             
         self.train_dataset = get_dataset(
-            args.dataset,
+            args=args,
+            dataset=args.dataset,
             data_dir=args.data_dir,
             dataset_split="train",
             transform_split="train",
@@ -75,16 +75,17 @@ class LearnerBase(object):
             use_preprocess=data2preprocess[args.dataset],
         )
         self.valid_dataset = get_dataset(
-            args.dataset,
+            args=args,
+            dataset=args.dataset,
             data_dir=args.data_dir,
             dataset_split="valid",
             transform_split="valid",
             percent=args.percent,
             use_preprocess=data2preprocess[args.dataset],
         )
-
         self.test_dataset = get_dataset(
-            args.dataset,
+            args=args,
+            dataset=args.dataset,
             data_dir=args.data_dir,
             dataset_split="test",
             transform_split="valid",
@@ -169,6 +170,26 @@ class LearnerBase(object):
         self.best_valid_acc_d, self.best_test_acc_d = 0., 0.
 
         print('finished model initialization....')
+        
+        
+    def wandb_switch(self, switch):
+        if self.args.wandb and switch == 'start':
+            wandb.init(
+                project=self.args.projcode,
+                name=f'{self.args.run_name} | seed: {self.args.seed}',
+                config={
+                },
+                settings=wandb.Settings(start_method="fork")
+            )
+            wandb.define_metric("training/*", step_metric="Iter step")
+            
+            wandb.define_metric("train/*", step_metric="Iter step")
+            wandb.define_metric("valid/*", step_metric="Iter step")
+            wandb.define_metric("test/*", step_metric="Iter step")
+                
+        elif self.args.wandb and switch == 'finish':
+            wandb.finish()
+
 
     # evaluation code for vanilla
     def evaluate(self, model, data_loader):
